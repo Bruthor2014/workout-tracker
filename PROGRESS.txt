@@ -82,15 +82,6 @@ A MEIO / POR DECIDIR
    não só no seletor? os dois exercícios que partilham imagem?). Próxima
    sessão: perguntar/esclarecer o que falta aqui.
 
-2. PROJETO "LOS PIRATAS" (D:\Xampp\htdocs\SiteOrg) — pediste um README,
-   que já está feito localmente. MAS ao tentar enviar para o GitHub
-   (https://github.com/Bruthor2014/piratas) descobri que o repositório
-   JÁ TEM código mais recente lá (commits de 2026-09-07, incluindo uma
-   reescrita completa para PHP/MySQL) do que a pasta local. NÃO fiz push
-   de nada para não apagar trabalho mais recente. Ainda por decidir:
-   puxar a versão do GitHub para local (recomendado), ou confirmar que a
-   versão local é mesmo a certa e substituir à mesma.
-
 ======================================================================
 PRÓXIMOS PASSOS DISCUTIDOS (Fase B do sistema multi-ginásio/PT independente)
 ======================================================================
