@@ -1,0 +1,144 @@
+WORKOUT TRACKER — ESTADO DO PROJETO
+Última atualização: 2026-10-03
+
+Este ficheiro existe para continuidade entre máquinas/sessões — a conversa
+com o Claude e a memória local dele ficam presas a este computador. Isto
+viaja com o projeto (git).
+
+======================================================================
+JÁ FEITO
+======================================================================
+
+STACK E BASE
+- Backend: Node.js + Express 5, PostgreSQL (SQL direto via `pg`, sem ORM)
+- Frontend: React 19 + Vite, React Router 7
+- Auth: JWT + bcrypt, role-based access control
+- Projeto no GitHub: https://github.com/Bruthor2014/workout-tracker
+  (README já escrito e atualizado lá)
+
+FUNCIONALIDADES PRINCIPAIS
+- Planos de treino multi-dia, planos de nutrição (refeição -> opção -> itens)
+- Composição corporal (peso, gordura, massa magra/muscular/óssea, água) com
+  gráficos de evolução
+- Treinos em direto (cronómetro) ou manuais, com duração
+- Dashboard: calendário semanal, estatísticas reais (treinos esta semana,
+  volume, streak, progresso mensal por semanas)
+- Gestão de membros (staff): pesquisa, filtro de inativos, perfil completo
+- Mensagens diretas + mensagens globais/segmentadas com placeholder {nome}
+- Subscrições por membro: personal_training, nutrition_plan, gym_membership
+  (cada uma ativa/inativa, com staff atribuído quando aplicável)
+
+ROLES (importante — mudou a meio do projeto)
+- `admin`   = reservado para administração da PLATAFORMA (ainda sem
+              funcionalidade construída, só reservado)
+- `gym_owner` = quem gere UM ginásio (isto é o que "admin" costumava
+              significar neste projeto antes da separação)
+- `personal_trainer`, `nutritionist`, `receptionist`, `intern`, `member`
+- gym_owner pode: repor password de um membro, mudar o role de alguém do
+  seu ginásio (promover a staff), gerir subscrições
+- rececionista também gere subscrições, mas NÃO passwords/roles (mais
+  sensível, só gym_owner)
+
+REDESIGN VISUAL (feito recentemente, site inteiro)
+- Saiu do estilo "glass" muito desfocado para um visual mais escuro/plano,
+  com cartões sólidos e cor por elemento (não tudo roxo igual)
+- Sidebar com ícone colorido por item + badge real de mensagens por ler
+- Logótipo novo (pulso/check em gradiente roxo->magenta)
+- Dashboard ("Os teus treinos"): cartões de dia da semana coloridos,
+  4 estatísticas reais (não decorativas), lista de treinos em linhas com
+  cor + grupo muscular
+- Barra de filtro (De/Até) redesenhada para bater certo com uma imagem de
+  referência que o utilizador mostrou
+
+EXERCÍCIOS
+- Catálogo expandido de 3 para 35 exercícios, em 8 grupos musculares
+  (Peito, Costas, Pernas, Ombros, Bíceps, Tríceps, Abdominais, Glúteos)
+- Seletor de exercícios novo (ExercisePicker.jsx): pesquisa + filtro por
+  grupo muscular, com imagem real do exercício
+- Imagens vêm da API pública da wger.de (gratuita, sem chave) — verificada
+  e confirmada real antes de usar. Guardadas em `exercises.image_url`.
+- DOIS exercícios partilham imagem por não haver uma específica:
+  "Afundo" usa a mesma imagem de "Agachamento"; "Abdominal Bicicleta" usa
+  a mesma de "Abdominal Reto" (Crunches). Se quiseres, dá para procurar
+  melhores substitutos mais tarde.
+
+BUGS REAIS ENCONTRADOS E CORRIGIDOS
+- Modal (editar subscrição, etc.) aparecia confinado/transparente quando
+  aberto de dentro de um cartão com `backdrop-filter` — corrigido
+  definitivamente usando `createPortal` para `document.body` em Modal.jsx
+- GlassCard.jsx nunca aceitava a prop `style` (fazia vários ajustes de
+  espaçamento noutras páginas não terem efeito nenhum, silenciosamente)
+- `toDateKey()` (frontend/src/utils/date.js) convertia para UTC antes de
+  formatar a data — desalinhava o calendário semanal e as estatísticas em
+  qualquer fuso horário diferente de UTC+0 (ex: Portugal). Corrigido.
+
+======================================================================
+A MEIO / POR DECIDIR
+======================================================================
+
+1. IMAGENS DOS EXERCÍCIOS — ficou em aberto mesmo antes de saíres. Não
+   chegámos a falar no que falta exatamente melhorar (qualidade das
+   imagens? mais exercícios? mostrar imagem também nos cartões de plano,
+   não só no seletor? os dois exercícios que partilham imagem?). Próxima
+   sessão: perguntar/esclarecer o que falta aqui.
+
+2. PROJETO "LOS PIRATAS" (D:\Xampp\htdocs\SiteOrg) — pediste um README,
+   que já está feito localmente. MAS ao tentar enviar para o GitHub
+   (https://github.com/Bruthor2014/piratas) descobri que o repositório
+   JÁ TEM código mais recente lá (commits de 2026-09-07, incluindo uma
+   reescrita completa para PHP/MySQL) do que a pasta local. NÃO fiz push
+   de nada para não apagar trabalho mais recente. Ainda por decidir:
+   puxar a versão do GitHub para local (recomendado), ou confirmar que a
+   versão local é mesmo a certa e substituir à mesma.
+
+======================================================================
+PRÓXIMOS PASSOS DISCUTIDOS (Fase B do sistema multi-ginásio/PT independente)
+======================================================================
+
+Contexto: o objetivo é a app suportar vários ginásios reais, mais PTs/
+nutricionistas independentes (com alunos de dentro E de fora de um
+ginásio), não só o modelo atual (um membro só pertence a UM ginásio fixo).
+
+JÁ FEITO desta fase:
+- Separação admin/gym_owner (acima)
+- Subscrição gym_membership (acima)
+
+POR FAZER (a parte mais complexa, ainda não começada):
+- Reescrever o controlo de acesso a planos/métricas/mensagens para
+  depender da RELAÇÃO (subscrição ativa com um PT/nutricionista) em vez
+  do `gym_id` partilhado — é isto que permite um PT ter alunos fora do
+  seu ginásio, e que faz um membro perder acesso a um plano quando a
+  relação com esse PT/ginásio termina (sem apagar os dados, só deixam de
+  aparecer)
+- Aba "Os meus alunos" para o PT/nutricionista (roster independente de
+  gym_id, baseado em member_subscriptions.assigned_staff_id)
+- Vista de staff do ginásio para o gym_owner (hoje só vê membros, não vê
+  a lista dos seus PTs/nutricionistas/rececionistas)
+- Código de convite pessoal do PT (para apanhar alunos fora de um
+  ginásio) — o utilizador disse explicitamente que isto é baixa
+  prioridade, "mais à frente vemos"
+
+AINDA MAIS ADIANTE (Fase A, totalmente adiada por escolha do utilizador):
+- `gym_id` passar a opcional (membro 100% independente, sem ginásio)
+- Criar ginásio self-service (hoje só existe via inserção direta na BD)
+- Entrar/sair de um ginásio específico via código de convite
+
+======================================================================
+CONTAS DE TESTE (password em texto simples só porque é ambiente de dev local)
+======================================================================
+- ruben.francisco.correia2003@gmail.com — gym_owner — password: ruben123
+- joao@gmail.com    — member — password: joao123
+- jose@gmail.com    — member — password: jose123
+- carol@gmail.com   — personal_trainer (foi promovida a meio de um teste
+                       de "mudar role") — password: carol123
+- ruben.teste@example.com — personal_trainer — password: 12345678
+
+Base de dados local: PostgreSQL, db "workout_tracker", user postgres,
+password em backend/.env (DB_PASSWORD).
+
+======================================================================
+COMO CORRER O PROJETO LOCALMENTE
+======================================================================
+Terminal 1: cd backend  && npm run dev   (porta 3000)
+Terminal 2: cd frontend && npm run dev   (porta 5173)
+Abrir http://localhost:5173
