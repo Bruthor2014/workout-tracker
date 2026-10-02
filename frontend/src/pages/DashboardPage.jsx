@@ -3,7 +3,12 @@ import { Link } from "react-router-dom";
 import GlassCard from "../components/GlassCard";
 import WeekCalendar from "../components/WeekCalendar";
 import WeeklyComparison from "../components/WeeklyComparison";
+import { IconDumbbell, IconChevronRight, IconPlusCircle, IconCalendar, IconFilter, IconRefresh } from "../components/Icons";
 import { apiRequest } from "../api/client";
+
+// Cor do traço à esquerda de cada linha do histórico — só decorativo, cicla
+// pela lista para dar alguma variedade visual.
+const ROW_ACCENTS = ["#a78bfa", "#60a5fa", "#34d399", "#fb923c", "#f472b6"];
 
 function formatDuration(startedAt, endedAt) {
   if (!startedAt || !endedAt) return null;
@@ -73,8 +78,9 @@ export default function DashboardPage() {
     <div className="page-container">
       <div className="page-header">
         <h1>Os teus treinos</h1>
-        <Link to="/log" className="glass-button">
-          + Registar treino
+        <Link to="/log" className="glass-button" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <IconPlusCircle size={18} />
+          Registar treino
         </Link>
       </div>
 
@@ -82,35 +88,33 @@ export default function DashboardPage() {
       <WeeklyComparison />
 
       <form className="filter-bar glass" onSubmit={handleFilterSubmit}>
-        <div>
-          <label className="field-label" htmlFor="from">
+        <span className="filter-bar-icon">
+          <IconCalendar size={18} />
+        </span>
+
+        <div className="filter-bar-field">
+          <label className="filter-bar-label" htmlFor="from">
             De
           </label>
-          <input
-            id="from"
-            type="date"
-            className="glass-input"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-          />
+          <input id="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
         </div>
-        <div>
-          <label className="field-label" htmlFor="to">
+
+        <div className="filter-bar-field">
+          <label className="filter-bar-label" htmlFor="to">
             Até
           </label>
-          <input
-            id="to"
-            type="date"
-            className="glass-input"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-          />
+          <input id="to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
         </div>
-        <div className="filter-actions">
-          <button type="submit" className="glass-button">
+
+        <span className="filter-bar-divider" />
+
+        <div className="filter-bar-actions">
+          <button type="submit" className="glass-button filter-bar-btn">
+            <IconFilter size={16} />
             Filtrar
           </button>
-          <button type="button" className="glass-button glass-button-secondary" onClick={clearFilter}>
+          <button type="button" className="glass-button glass-button-secondary filter-bar-btn" onClick={clearFilter}>
+            <IconRefresh size={16} />
             Limpar
           </button>
         </div>
@@ -128,37 +132,49 @@ export default function DashboardPage() {
         </GlassCard>
       )}
 
-      <div className="session-grid">
-        {sessions.map((session) => {
+      <div className="workout-list">
+        {sessions.map((session, i) => {
           const duration = formatDuration(session.started_at, session.ended_at);
           const totalWeight = Number(session.total_weight_kg);
+          const accent = ROW_ACCENTS[i % ROW_ACCENTS.length];
           return (
             <Link to={`/log/${session.id}`} key={session.id} className="session-card-link">
-              <GlassCard className="session-card">
-                <span className="date">{session.title || "Treino sem título"}</span>
-                <span className="text-secondary">
-                  {/* "T00:00:00" força o parsing em hora local, não UTC — evita
-                      que a data mude de dia consoante o fuso horário do browser. */}
-                  {new Date(`${session.performed_at}T00:00:00`).toLocaleDateString("pt-PT")}
+              <GlassCard className="workout-row" style={{ "--row-accent": accent }}>
+                <span className="workout-row-icon">
+                  <IconDumbbell size={20} />
                 </span>
-                <span className="text-secondary">
-                  {session.exercise_count ?? 0} exercícios · {session.set_count ?? 0} séries
-                </span>
-                {(totalWeight > 0 || duration) && (
+
+                <div className="workout-row-info">
+                  <span className="workout-row-title">{session.title || "Treino sem título"}</span>
                   <span className="text-secondary">
-                    {totalWeight > 0 && `${totalWeight} kg levantados`}
-                    {totalWeight > 0 && duration && " · "}
-                    {duration}
+                    {session.muscle_groups || `${session.exercise_count ?? 0} exercícios · ${session.set_count ?? 0} séries`}
                   </span>
-                )}
-                {session.notes && <span className="text-secondary">{session.notes}</span>}
-                <button
-                  type="button"
-                  className="glass-button glass-button-secondary session-delete"
-                  onClick={(e) => handleDelete(e, session.id)}
-                >
-                  Eliminar
-                </button>
+                </div>
+
+                <div className="workout-row-meta">
+                  <span className="workout-row-meta-item">
+                    {/* "T00:00:00" força o parsing em hora local, não UTC — evita
+                        que a data mude de dia consoante o fuso horário do browser. */}
+                    {new Date(`${session.performed_at}T00:00:00`).toLocaleDateString("pt-PT")}
+                  </span>
+                  {duration && <span className="workout-row-meta-item">{duration}</span>}
+                  {totalWeight > 0 && <span className="workout-row-meta-item">{totalWeight} kg</span>}
+                  <span className="workout-row-meta-item">{session.exercise_count ?? 0} exercícios</span>
+                </div>
+
+                <div className="workout-row-actions">
+                  <button
+                    type="button"
+                    className="glass-button glass-button-secondary session-delete"
+                    onClick={(e) => handleDelete(e, session.id)}
+                  >
+                    Eliminar
+                  </button>
+                  <span className="glass-button glass-button-secondary workout-row-view">
+                    Ver detalhes
+                    <IconChevronRight size={14} />
+                  </span>
+                </div>
               </GlassCard>
             </Link>
           );

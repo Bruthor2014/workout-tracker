@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import GlassCard from "../components/GlassCard";
+import ExercisePicker from "../components/ExercisePicker";
 import { apiRequest } from "../api/client";
 
 const emptySet = () => ({ exercise_id: "", reps: "", weight: "" });
@@ -306,19 +307,11 @@ export default function LogWorkoutPage() {
             </div>
             {sets.map((row, index) => (
               <div className="set-row" key={index}>
-                <select
-                  className="glass-input"
+                <ExercisePicker
+                  exercises={exercises}
                   value={row.exercise_id}
-                  onChange={(e) => updateSet(index, "exercise_id", e.target.value)}
-                  required
-                >
-                  <option value="">Escolhe...</option>
-                  {exercises.map((ex) => (
-                    <option key={ex.id} value={ex.id}>
-                      {ex.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(exerciseId) => updateSet(index, "exercise_id", exerciseId)}
+                />
                 <input
                   type="number"
                   min="1"

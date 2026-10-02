@@ -7,13 +7,20 @@ async function listSessions(req, res) {
     `SELECT s.id, s.title, s.performed_at, s.notes, s.started_at, s.ended_at,
             COUNT(DISTINCT sl.exercise_id) AS exercise_count,
             COUNT(sl.id) AS set_count,
-            COALESCE(SUM(sl.reps * sl.weight), 0) AS total_weight_kg
+            COALESCE(SUM(sl.reps * sl.weight), 0) AS total_weight_kg,
+            mg.muscle_groups
        FROM workout_sessions s
        LEFT JOIN set_logs sl ON sl.session_id = s.id
+       LEFT JOIN LATERAL (
+         SELECT STRING_AGG(DISTINCT e.muscle_group, ' • ' ORDER BY e.muscle_group) AS muscle_groups
+           FROM set_logs sl2
+           JOIN exercises e ON e.id = sl2.exercise_id
+          WHERE sl2.session_id = s.id AND e.muscle_group IS NOT NULL
+       ) mg ON true
       WHERE s.user_id = $1
         AND ($2::date IS NULL OR s.performed_at >= $2::date)
         AND ($3::date IS NULL OR s.performed_at <= $3::date)
-      GROUP BY s.id
+      GROUP BY s.id, mg.muscle_groups
       ORDER BY s.performed_at DESC`,
     [req.user.id, from || null, to || null]
   );

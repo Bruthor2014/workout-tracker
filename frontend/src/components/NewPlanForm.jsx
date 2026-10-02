@@ -1,5 +1,6 @@
 import { useState } from "react";
 import GlassCard from "./GlassCard";
+import ExercisePicker from "./ExercisePicker";
 import { apiRequest } from "../api/client";
 
 const emptyExerciseRow = () => ({ exercise_id: "", target_sets: "", target_reps: "", target_load: "" });
@@ -166,19 +167,11 @@ export default function NewPlanForm({ exercises, submitPath, method = "POST", in
             </div>
             {day.exercises.map((row, exIndex) => (
               <div className="set-row" key={exIndex}>
-                <select
-                  className="glass-input"
+                <ExercisePicker
+                  exercises={exercises}
                   value={row.exercise_id}
-                  onChange={(e) => updateExercise(dayIndex, exIndex, "exercise_id", e.target.value)}
-                  required
-                >
-                  <option value="">Escolhe...</option>
-                  {exercises.map((ex) => (
-                    <option key={ex.id} value={ex.id}>
-                      {ex.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(exerciseId) => updateExercise(dayIndex, exIndex, "exercise_id", exerciseId)}
+                />
                 <input
                   type="number"
                   min="1"

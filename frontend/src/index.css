@@ -1,19 +1,19 @@
 :root {
-  --bg-gradient: radial-gradient(circle at 20% 20%, #2d1b69 0%, transparent 55%),
-    radial-gradient(circle at 80% 0%, #7f2fbf 0%, transparent 45%),
-    radial-gradient(circle at 50% 100%, #1b6fa8 0%, transparent 50%),
-    #0e0a1f;
+  --bg-gradient: radial-gradient(circle at 15% 0%, rgba(124, 58, 237, 0.22) 0%, transparent 45%),
+    radial-gradient(circle at 85% 100%, rgba(37, 99, 235, 0.16) 0%, transparent 50%),
+    #0a0818;
 
-  --glass-bg: rgba(255, 255, 255, 0.08);
-  --glass-bg-strong: rgba(255, 255, 255, 0.14);
-  --glass-border: rgba(255, 255, 255, 0.22);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-bg-strong: rgba(255, 255, 255, 0.055);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
 
   --text-primary: #f5f3ff;
-  --text-secondary: rgba(245, 243, 255, 0.65);
+  --text-secondary: rgba(245, 243, 255, 0.6);
   --accent: #a78bfa;
   --accent-strong: #8b5cf6;
   --danger: #f87171;
+  --success: #34d399;
 
   color-scheme: dark;
 }
@@ -47,18 +47,14 @@ a {
 .glass {
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
-  border-radius: 18px;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  border-radius: 16px;
   box-shadow: var(--glass-shadow);
 }
 
 .glass-strong {
   background: var(--glass-bg-strong);
   border: 1px solid var(--glass-border);
-  border-radius: 18px;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  border-radius: 16px;
   box-shadow: var(--glass-shadow);
 }
 

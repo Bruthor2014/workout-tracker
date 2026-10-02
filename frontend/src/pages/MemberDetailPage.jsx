@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import GlassCard from "../components/GlassCard";
+import Modal from "../components/Modal";
 import BodyMetricsSection from "../components/BodyMetricsSection";
 import SubscriptionsSection from "../components/SubscriptionsSection";
 import NewPlanForm from "../components/NewPlanForm";
@@ -15,6 +16,174 @@ const SUBSCRIPTION_MANAGER_ROLES = ["gym_owner", "receptionist"];
 // acesso a treino/nutrição/composição corporal — esses continuam só para
 // quem já os geria antes.
 const CLINICAL_STAFF_ROLES = ["gym_owner", "personal_trainer", "nutritionist"];
+// Repor password e mudar role são mais sensíveis do que gerir
+// subscrições — só gym_owner.
+const PASSWORD_MANAGER_ROLES = ["gym_owner"];
+const ROLE_MANAGER_ROLES = ["gym_owner"];
+
+// Espelha ASSIGNABLE_ROLES do backend — nunca inclui gym_owner nem admin
+// (ver memberController.js para o porquê).
+const ASSIGNABLE_ROLES = [
+  { value: "member", label: "Membro" },
+  { value: "personal_trainer", label: "Personal Trainer" },
+  { value: "nutritionist", label: "Nutricionista" },
+  { value: "receptionist", label: "Rececionista" },
+  { value: "intern", label: "Estagiário" },
+];
+
+function ChangeRoleButton({ memberId }) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [role, setRole] = useState("member");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  function close() {
+    setOpen(false);
+    setRole("member");
+    setError("");
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      await apiRequest(`/members/${memberId}/role`, { method: "PUT", body: { role } });
+      // Deixa de ser "membro" (ou muda de role), por isso esta página deixa
+      // de se aplicar — volta à lista de membros.
+      navigate("/members");
+    } catch (err) {
+      setError(err.message);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <button type="button" className="link-button" onClick={() => setOpen(true)}>
+        Mudar role
+      </button>
+
+      {open && (
+        <Modal onClose={close}>
+          <GlassCard className="preview-card" strong>
+            <h3>Mudar role</h3>
+            <form onSubmit={handleSubmit}>
+              <div style={{ marginTop: 14 }}>
+                <label className="field-label" htmlFor="new-role">
+                  Novo role
+                </label>
+                <select
+                  id="new-role"
+                  className="glass-input"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                >
+                  {ASSIGNABLE_ROLES.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {error && <p className="error-text">{error}</p>}
+              <div className="form-actions">
+                <button type="button" className="glass-button glass-button-secondary" onClick={close}>
+                  Cancelar
+                </button>
+                <button type="submit" className="glass-button" disabled={saving}>
+                  {saving ? "A guardar..." : "Guardar"}
+                </button>
+              </div>
+            </form>
+          </GlassCard>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+function ResetPasswordButton({ memberId }) {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+
+  function close() {
+    setOpen(false);
+    setPassword("");
+    setError("");
+    setDone(false);
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      await apiRequest(`/members/${memberId}/password`, { method: "PUT", body: { new_password: password } });
+      setDone(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <button type="button" className="link-button" onClick={() => setOpen(true)}>
+        Repor password
+      </button>
+
+      {open && (
+        <Modal onClose={close}>
+          <GlassCard className="preview-card" strong>
+            <h3>Repor password</h3>
+            {done ? (
+              <>
+                <p className="text-secondary" style={{ marginTop: 14 }}>Password alterada com sucesso.</p>
+                <div className="form-actions">
+                  <button type="button" className="glass-button" onClick={close}>
+                    Fechar
+                  </button>
+                </div>
+              </>
+            ) : (
+              <form onSubmit={handleSubmit}>
+                <div style={{ marginTop: 14 }}>
+                  <label className="field-label" htmlFor="new-password">
+                    Nova password
+                  </label>
+                  <input
+                    id="new-password"
+                    type="password"
+                    className="glass-input"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    minLength={8}
+                    required
+                  />
+                </div>
+                {error && <p className="error-text">{error}</p>}
+                <div className="form-actions">
+                  <button type="button" className="glass-button glass-button-secondary" onClick={close}>
+                    Cancelar
+                  </button>
+                  <button type="submit" className="glass-button" disabled={saving}>
+                    {saving ? "A guardar..." : "Guardar"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </GlassCard>
+        </Modal>
+      )}
+    </>
+  );
+}
 
 function MemberAvatar({ member }) {
   const avatarUrl = resolveAssetUrl(member.avatar_url);
@@ -175,6 +344,12 @@ export default function MemberDetailPage() {
                 <h3>{member.name}</h3>
                 <p className="text-secondary">{member.email}</p>
                 <span className="role-badge role-badge-static">Membro</span>
+                {(PASSWORD_MANAGER_ROLES.includes(user.role) || ROLE_MANAGER_ROLES.includes(user.role)) && (
+                  <div style={{ marginTop: 6, display: "flex", gap: 10 }}>
+                    {PASSWORD_MANAGER_ROLES.includes(user.role) && <ResetPasswordButton memberId={id} />}
+                    {ROLE_MANAGER_ROLES.includes(user.role) && <ChangeRoleButton memberId={id} />}
+                  </div>
+                )}
               </div>
             </div>
 

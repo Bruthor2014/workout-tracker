@@ -1,87 +1,213 @@
 import { useEffect, useState } from "react";
 import GlassCard from "./GlassCard";
-import WeeklyBarChart from "./WeeklyBarChart";
+import { IconDumbbell, IconTrendingUp, IconFlame, IconBarChart } from "./Icons";
 import { apiRequest } from "../api/client";
 import { startOfWeek, addDays, toDateKey } from "../utils/date";
 
-const WEEKS_BACK = 4; // esta semana + 3 anteriores ("até 1 mês atrás")
+const DAYS_OF_HISTORY = 60; // suficiente para esta semana + a anterior + um streak razoável
+const MONTH_WEEKS = 5; // esta semana + 4 anteriores, para o "Progresso mensal"
 
 function formatKg(value) {
-  return `${Math.round(value)} kg`;
+  return `${Math.round(value).toLocaleString("pt-PT")} kg`;
 }
 
-function formatMinutes(value) {
-  if (value < 60) return `${Math.round(value)} min`;
-  const h = Math.floor(value / 60);
-  const m = Math.round(value % 60);
-  return m ? `${h}h${m}` : `${h}h`;
+function pctDelta(current, previous) {
+  if (!previous) return null;
+  return Math.round(((current - previous) / previous) * 100);
 }
 
-function formatWeekLabel(start) {
-  const end = addDays(start, 6);
-  return `${start.getDate()}/${start.getMonth() + 1} a ${end.getDate()}/${end.getMonth() + 1}`;
+function DeltaBadge({ value }) {
+  if (value === null) return null;
+  const positive = value >= 0;
+  return (
+    <span className={`stat-tile-delta ${positive ? "positive" : "negative"}`}>
+      <span style={{ display: "inline-flex", transform: positive ? undefined : "scaleY(-1)" }}>
+        <IconTrendingUp size={12} />
+      </span>
+      {positive ? "+" : ""}
+      {value}%
+    </span>
+  );
 }
 
-// Busca as sessões das últimas WEEKS_BACK semanas (independente do filtro
-// de datas do Dashboard) e agrega peso levantado e duração por semana, para
-// comparar a semana atual com as anteriores.
+function MiniLineChart({ values }) {
+  const max = Math.max(...values, 1);
+  const width = 280;
+  const height = 70;
+  const stepX = width / (values.length - 1);
+
+  const points = values.map((v, i) => ({
+    x: i * stepX,
+    y: height - (v / max) * (height - 10) - 5,
+  }));
+
+  const path = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
+  const areaPath = `${path} L${width},${height} L0,${height} Z`;
+
+  return (
+    <svg className="mini-line-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="weeklyProgressFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill="url(#weeklyProgressFill)" stroke="none" />
+      <path d={path} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      {points.map((p, i) => (
+        <circle key={i} cx={p.x} cy={p.y} r="2.5" fill="var(--accent)" />
+      ))}
+    </svg>
+  );
+}
+
+// Lê as sessões dos últimos DAYS_OF_HISTORY dias e deriva tudo localmente:
+// dias treinados esta semana vs a semana passada, volume total, streak de
+// dias consecutivos, e o volume diário desta semana para o mini-gráfico.
+// Tudo calculado a partir de dados reais, nada decorativo.
 export default function WeeklyComparison() {
-  const [weeks, setWeeks] = useState(null);
+  const [stats, setStats] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const thisWeekStart = startOfWeek(new Date());
-    const rangeStart = addDays(thisWeekStart, -7 * (WEEKS_BACK - 1));
-    const rangeEnd = addDays(thisWeekStart, 6);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const thisWeekStart = startOfWeek(today);
+    const lastWeekStart = addDays(thisWeekStart, -7);
+    const rangeStart = addDays(today, -DAYS_OF_HISTORY);
 
-    apiRequest(`/sessions?from=${toDateKey(rangeStart)}&to=${toDateKey(rangeEnd)}`)
+    apiRequest(`/sessions?from=${toDateKey(rangeStart)}&to=${toDateKey(today)}`)
       .then((sessions) => {
-        const buckets = Array.from({ length: WEEKS_BACK }, (_, i) => {
-          const start = addDays(thisWeekStart, -7 * (WEEKS_BACK - 1 - i));
-          return { start, weight: 0, minutes: 0 };
-        });
-
+        const volumeByDate = new Map();
         for (const s of sessions) {
-          const performed = new Date(`${s.performed_at}T00:00:00`);
-          const bucket = buckets.find((b, i) => {
-            const end = i < buckets.length - 1 ? buckets[i + 1].start : addDays(b.start, 7);
-            return performed >= b.start && performed < end;
-          });
-          if (!bucket) continue;
-          bucket.weight += Number(s.total_weight_kg) || 0;
-          if (s.started_at && s.ended_at) {
-            bucket.minutes += (new Date(s.ended_at) - new Date(s.started_at)) / 60000;
+          const weight = Number(s.total_weight_kg) || 0;
+          volumeByDate.set(s.performed_at, (volumeByDate.get(s.performed_at) || 0) + weight);
+        }
+        const attendedDates = new Set(volumeByDate.keys());
+
+        function sumVolumeInRange(start, days) {
+          let total = 0;
+          let count = 0;
+          for (let i = 0; i < days; i++) {
+            const key = toDateKey(addDays(start, i));
+            if (volumeByDate.has(key)) {
+              total += volumeByDate.get(key);
+              count++;
+            }
           }
+          return { total, count };
         }
 
-        setWeeks(
-          buckets.map((b) => ({
-            label: formatWeekLabel(b.start),
-            weight: b.weight,
-            minutes: b.minutes,
-          }))
-        );
+        const thisWeek = sumVolumeInRange(thisWeekStart, 7);
+        const lastWeek = sumVolumeInRange(lastWeekStart, 7);
+
+        // Progresso mensal: quantos dias treinou em cada uma das últimas
+        // MONTH_WEEKS semanas (esta incluída) — não é volume, é frequência.
+        const monthlyProgress = Array.from({ length: MONTH_WEEKS }, (_, i) => {
+          const weekStart = addDays(thisWeekStart, -7 * (MONTH_WEEKS - 1 - i));
+          const { count } = sumVolumeInRange(weekStart, 7);
+          return { label: `${weekStart.getDate()}/${weekStart.getMonth() + 1}`, count };
+        });
+
+        // Streak: dias consecutivos com treino, a contar para trás a partir
+        // de hoje — se ainda não treinaste hoje, começa a contar de ontem
+        // (não zera o streak só porque o dia ainda não acabou).
+        let streak = 0;
+        let cursor = attendedDates.has(toDateKey(today)) ? today : addDays(today, -1);
+        while (attendedDates.has(toDateKey(cursor))) {
+          streak++;
+          cursor = addDays(cursor, -1);
+        }
+
+        setStats({
+          workoutsThisWeek: thisWeek.count,
+          workoutsLastWeek: lastWeek.count,
+          volumeThisWeek: thisWeek.total,
+          volumeLastWeek: lastWeek.total,
+          streak,
+          monthlyProgress,
+        });
       })
       .catch((err) => setError(err.message));
   }, []);
 
   if (error) return <p className="error-text">{error}</p>;
-  if (!weeks) return <p className="text-secondary">A carregar...</p>;
+  if (!stats) return <p className="text-secondary">A carregar...</p>;
 
-  const hasAnyData = weeks.some((w) => w.weight > 0 || w.minutes > 0);
-  if (!hasAnyData) return null;
+  const workoutsDelta = pctDelta(stats.workoutsThisWeek, stats.workoutsLastWeek);
+  const volumeDelta = pctDelta(stats.volumeThisWeek, stats.volumeLastWeek);
 
   return (
-    <div className="preview-grid" style={{ marginBottom: 20 }}>
-      <GlassCard className="preview-card" strong>
-        <h3>Peso levantado por semana</h3>
-        <p className="text-secondary preview-caption">Esta semana vs últimas {WEEKS_BACK - 1}</p>
-        <WeeklyBarChart data={weeks.map((w) => ({ label: w.label, value: w.weight }))} formatValue={formatKg} />
+    <div className="stats-row">
+      <GlassCard className="stat-tile" strong>
+        <div className="stat-tile-header">
+          <span className="stat-tile-label">
+            <span className="stat-tile-icon">
+              <IconDumbbell size={16} />
+            </span>
+            Treinos esta semana
+          </span>
+          <DeltaBadge value={workoutsDelta} />
+        </div>
+        <div className="stat-tile-value-row">
+          <span className="stat-tile-value">{stats.workoutsThisWeek}</span>
+          <span className="stat-tile-sub">/ 7</span>
+        </div>
+        <div className="progress-track">
+          <div className="progress-fill" style={{ width: `${(stats.workoutsThisWeek / 7) * 100}%` }} />
+        </div>
       </GlassCard>
-      <GlassCard className="preview-card" strong>
-        <h3>Tempo de treino por semana</h3>
-        <p className="text-secondary preview-caption">Só treinos com cronómetro</p>
-        <WeeklyBarChart data={weeks.map((w) => ({ label: w.label, value: w.minutes }))} formatValue={formatMinutes} />
+
+      <GlassCard className="stat-tile" strong>
+        <div className="stat-tile-header">
+          <span className="stat-tile-label">
+            <span className="stat-tile-icon amber">
+              <IconTrendingUp size={16} />
+            </span>
+            Volume total
+          </span>
+          <DeltaBadge value={volumeDelta} />
+        </div>
+        <div className="stat-tile-value-row">
+          <span className="stat-tile-value">{formatKg(stats.volumeThisWeek)}</span>
+        </div>
+        <span className="stat-tile-sub">vs semana passada</span>
+      </GlassCard>
+
+      <GlassCard className="stat-tile" strong>
+        <div className="stat-tile-header">
+          <span className="stat-tile-label">
+            <span className={`stat-tile-icon flame${stats.streak > 0 ? " active" : ""}`}>
+              <IconFlame size={16} />
+            </span>
+            Streak atual
+          </span>
+        </div>
+        <div className="stat-tile-value-row">
+          <span className="stat-tile-value">{stats.streak}</span>
+          <span className="stat-tile-sub">dias</span>
+        </div>
+        <span className="stat-tile-sub">{stats.streak > 0 ? "Continua assim!" : "Começa hoje"}</span>
+      </GlassCard>
+
+      <GlassCard className="stat-tile wide" strong>
+        <div className="stat-tile-header">
+          <span className="stat-tile-label">
+            <span className="stat-tile-icon blue">
+              <IconBarChart size={16} />
+            </span>
+            Progresso mensal
+          </span>
+          <DeltaBadge value={workoutsDelta} />
+        </div>
+        <MiniLineChart values={stats.monthlyProgress.map((w) => w.count)} />
+        <div className="stat-tile-header">
+          {stats.monthlyProgress.map((w) => (
+            <span key={w.label} className="stat-tile-sub">
+              {w.label}
+            </span>
+          ))}
+        </div>
       </GlassCard>
     </div>
   );

@@ -71,11 +71,16 @@ CREATE UNIQUE INDEX idx_one_active_subscription_per_type
     WHERE is_active;
 
 -- Catálogo de exercícios (por ginásio, não global)
+-- image_url aponta para uma imagem ilustrativa do exercício (ex: a API
+-- pública da wger.de, wger.de/api/v2/exerciseimage/) — não é obrigatório;
+-- o picker de exercícios no frontend usa um pictograma por grupo muscular
+-- como alternativa quando não há imagem.
 CREATE TABLE exercises (
     id            SERIAL PRIMARY KEY,
     gym_id        INTEGER NOT NULL REFERENCES gyms(id),
     name          VARCHAR(150) NOT NULL,
     muscle_group  VARCHAR(100),
+    image_url     TEXT,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -229,3 +234,45 @@ CREATE INDEX idx_meal_options_slot ON meal_options(meal_slot_id);
 CREATE INDEX idx_meal_option_items_option ON meal_option_items(meal_option_id);
 CREATE INDEX idx_messages_sender ON messages(sender_id, created_at);
 CREATE INDEX idx_messages_recipient ON messages(recipient_id, created_at);
+
+-- Catálogo inicial de exercícios para o ginásio de exemplo (gym_id 1) — dá
+-- ao picker de exercícios (filtro por grupo muscular + imagem) algo com que
+-- trabalhar logo de início, em vez de uma tabela vazia. As imagens vêm da
+-- API pública da wger.de (wger.de/api/v2/exerciseimage/), verificadas uma a
+-- uma antes de serem usadas. Ajustar/remover consoante o ginásio real.
+INSERT INTO exercises (gym_id, name, muscle_group, image_url) VALUES
+(1, 'Supino Plano', 'Peito', 'https://wger.de/media/exercise-images/192/Bench-press-1.png'),
+(1, 'Supino Inclinado', 'Peito', 'https://wger.de/media/exercise-images/41/Incline-bench-press-1.png'),
+(1, 'Supino Declinado', 'Peito', 'https://wger.de/media/exercise-images/100/Decline-bench-press-1.png'),
+(1, 'Crucifixo', 'Peito', 'https://wger.de/media/exercise-images/98/Butterfly-machine-2.png'),
+(1, 'Peck Deck', 'Peito', 'https://wger.de/media/exercise-images/98/Butterfly-machine-2.png'),
+(1, 'Flexões', 'Peito', 'https://wger.de/media/exercise-images/1551/a6a9e561-3965-45c6-9f2b-ee671e1a3a45.png'),
+(1, 'Remada Curvada', 'Costas', 'https://wger.de/media/exercise-images/109/Barbell-rear-delt-row-1.png'),
+(1, 'Puxada Alta', 'Costas', 'https://wger.de/media/exercise-images/158/0d51a0f2-622f-434b-beb8-1a003c54712a.png'),
+(1, 'Remada Baixa', 'Costas', 'https://wger.de/media/exercise-images/1117/2555c4c3-a84d-47db-b83b-cbf721f12e45.png'),
+(1, 'Levantamento Terra', 'Costas', 'https://wger.de/media/exercise-images/184/1709c405-620a-4d07-9658-fade2b66a2df.jpeg'),
+(1, 'Puxada Pegada Fechada', 'Costas', 'https://wger.de/media/exercise-images/158/0d51a0f2-622f-434b-beb8-1a003c54712a.png'),
+(1, 'Agachamento', 'Pernas', 'https://wger.de/media/exercise-images/984/5c7ffe68-e7b2-47f3-a22a-f9cc28640432.png'),
+(1, 'Leg Press', 'Pernas', 'https://wger.de/media/exercise-images/371/d2136f96-3a43-4d4c-9944-1919c4ca1ce1.webp'),
+(1, 'Extensão de Pernas', 'Pernas', 'https://wger.de/media/exercise-images/369/78c915d1-e46d-4d30-8124-65d68664c3ef.png'),
+(1, 'Flexão de Pernas', 'Pernas', 'https://wger.de/media/exercise-images/364/b318dde9-f5f2-489f-940a-cd864affb9e3.png'),
+(1, 'Afundo', 'Pernas', 'https://wger.de/media/exercise-images/984/5c7ffe68-e7b2-47f3-a22a-f9cc28640432.png'),
+(1, 'Agachamento Búlgaro', 'Pernas', 'https://wger.de/media/exercise-images/988/6283b258-a4d7-4833-84f7-a38987022d3d.png'),
+(1, 'Desenvolvimento Militar', 'Ombros', 'https://wger.de/media/exercise-images/418/fa2a2207-43cb-4dc0-bc2a-039e32544790.png'),
+(1, 'Elevação Lateral', 'Ombros', 'https://wger.de/media/exercise-images/148/lateral-dumbbell-raises-large-2.png'),
+(1, 'Elevação Frontal', 'Ombros', 'https://wger.de/media/exercise-images/256/b7def5bc-2352-499b-b9e5-fff741003831.png'),
+(1, 'Remada Alta', 'Ombros', 'https://wger.de/media/exercise-images/694/119e6823-6960-4341-a9e1-aaf78d7fb57c.png'),
+(1, 'Rosca Direta', 'Bíceps', 'https://wger.de/media/exercise-images/1290/c05818bf-1c81-46df-9f24-42e354265388.png'),
+(1, 'Rosca Alternada', 'Bíceps', 'https://wger.de/media/exercise-images/1192/651a4535-8210-4dbd-8f06-61d95fdd9963.png'),
+(1, 'Rosca Martelo', 'Bíceps', 'https://wger.de/media/exercise-images/86/Bicep-hammer-curl-1.png'),
+(1, 'Rosca Scott', 'Bíceps', 'https://wger.de/media/exercise-images/193/Preacher-curl-3-1.png'),
+(1, 'Tríceps Corda', 'Tríceps', 'https://wger.de/media/exercise-images/1185/c5ca283d-8958-4fd8-9d59-a3f52a3ac66b.jpg'),
+(1, 'Tríceps Testa', 'Tríceps', 'https://wger.de/media/exercise-images/50/695ced5c-9961-4076-add2-cb250d01089e.png'),
+(1, 'Mergulho em Paralelas', 'Tríceps', 'https://wger.de/media/exercise-images/194/34600351-8b0b-4cb0-8daa-583537be15b0.png'),
+(1, 'Prancha', 'Abdominais', 'https://wger.de/media/exercise-images/458/b7bd9c28-9f1d-4647-bd17-ab6a3adf5770.png'),
+(1, 'Abdominal Reto', 'Abdominais', 'https://wger.de/media/exercise-images/91/Crunches-1.png'),
+(1, 'Abdominal Bicicleta', 'Abdominais', 'https://wger.de/media/exercise-images/91/Crunches-1.png'),
+(1, 'Elevação de Pernas', 'Abdominais', 'https://wger.de/media/exercise-images/125/Leg-raises-2.png'),
+(1, 'Hip Thrust', 'Glúteos', 'https://wger.de/media/exercise-images/1642/a81ad922-caf5-47f8-99b4-640cb0717436.webp'),
+(1, 'Elevação Pélvica', 'Glúteos', 'https://wger.de/media/exercise-images/265/7528acb4-b2cc-4b75-b6ae-d514cbd4f78b.png'),
+(1, 'Stiff', 'Glúteos', 'https://wger.de/media/exercise-images/507/13d526ab-12fc-461e-828a-051dd7c13fb1.png');
