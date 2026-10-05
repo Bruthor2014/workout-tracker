@@ -453,7 +453,7 @@ export default function FinancePage() {
                   <strong style={{ fontSize: "1.15rem" }}>{fmtEuro(grossMonth)}</strong>
                 </GlassCard>
                 <GlassCard style={{ flex: 1, minWidth: 160, padding: "12px 18px" }}>
-                  <div className="text-secondary" style={{ fontSize: "0.82rem" }}>Retenção ginásio</div>
+                  <div className="text-secondary" style={{ fontSize: "0.82rem" }}>Ginásio recebe (PT)</div>
                   <strong style={{ fontSize: "1.15rem", color: "#4ade80" }}>{fmtEuro(gymCutMonth)}</strong>
                 </GlassCard>
                 <GlassCard style={{ flex: 1, minWidth: 160, padding: "12px 18px" }}>
@@ -472,9 +472,8 @@ export default function FinancePage() {
 
               <div className="member-grid">
                 {staffList.map((s) => {
-                  const { gross, cut, net } = calcEarnings(s);
+                  const { cut, net } = calcEarnings(s);
                   const url = resolveAssetUrl(s.avatar_url);
-                  const hasCut = s.gym_cut_pct != null || s.gym_cut_fixed != null;
                   const totalShifts = Number(s.shifts_present) + Number(s.shifts_adjusted) + Number(s.shifts_absent) + Number(s.shifts_pending);
                   return (
                     <GlassCard key={s.id} className="member-tile" strong>
@@ -500,7 +499,7 @@ export default function FinancePage() {
 
                       <div style={{ marginTop: 12, fontSize: "0.83rem", display: "flex", flexDirection: "column", gap: 3 }}>
                         {[
-                          ["Salário base", fmtEuro(s.base_salary) + "/mês"],
+                          Number(s.base_salary) > 0     && ["Salário base", fmtEuro(s.base_salary) + "/mês"],
                           Number(s.rate_reception_h) > 0 && ["Receção", fmtEuro(s.rate_reception_h) + "/h · " + (s.month_hours_reception || 0) + "h"],
                           Number(s.rate_sala_h) > 0      && ["Sala",    fmtEuro(s.rate_sala_h)      + "/h · " + (s.month_hours_sala      || 0) + "h"],
                           Number(s.rate_class_h) > 0     && ["Aulas",   fmtEuro(s.rate_class_h)     + "/h · " + (s.month_hours_class     || 0) + "h"],
@@ -511,18 +510,33 @@ export default function FinancePage() {
                           </div>
                         ))}
 
-                        <div style={{ borderTop: "1px solid var(--glass-border)", paddingTop: 4, marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between" }}>
-                            <span className="text-secondary">Total bruto</span>
-                            <span>{fmtEuro(gross)}</span>
-                          </div>
-                          {hasCut && (
-                            <div style={{ display: "flex", justifyContent: "space-between" }}>
-                              <span className="text-secondary">Retenção {s.gym_cut_pct != null ? `(${s.gym_cut_pct}%)` : "(fixo)"}</span>
-                              <span style={{ color: "#4ade80" }}>– {fmtEuro(cut)}</span>
+                        {/* PT clients — shown separately so gym cut context is clear */}
+                        {Number(s.rate_pt_month) > 0 && (() => {
+                          const clients = Number(s.month_pt_clients || 0);
+                          const ptE = Number(s.rate_pt_month) * clients;
+                          const cutLabel = s.gym_cut_pct != null
+                            ? `${s.gym_cut_pct}% dos clientes PT`
+                            : s.gym_cut_fixed != null
+                            ? `${fmtEuro(s.gym_cut_fixed)}/cliente PT`
+                            : null;
+                          return (
+                            <div style={{ borderTop: "1px solid var(--glass-border)", paddingTop: 6, marginTop: 3, display: "flex", flexDirection: "column", gap: 3 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                <span className="text-secondary">Clientes PT ({clients})</span>
+                                <span>{clients} × {fmtEuro(s.rate_pt_month)} = {fmtEuro(ptE)}</span>
+                              </div>
+                              {cutLabel && cut > 0 && (
+                                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                  <span style={{ color: "#4ade80", fontSize: "0.78rem" }}>Ginásio fica ({cutLabel})</span>
+                                  <span style={{ color: "#4ade80" }}>– {fmtEuro(cut)}</span>
+                                </div>
+                              )}
                             </div>
-                          )}
-                          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 600, fontSize: "1rem", marginTop: 2 }}>
+                          );
+                        })()}
+
+                        <div style={{ borderTop: "1px solid var(--glass-border)", paddingTop: 4, marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 600, fontSize: "1rem" }}>
                             <span>A pagar</span>
                             <span>{fmtEuro(net)}</span>
                           </div>
