@@ -372,6 +372,79 @@ function AddWeekModal({ staffList, onClose, onSaved, editingWeek }) {
   );
 }
 
+// ─── Modal detalhe de presenças mensais ────────────────────────────────────
+const DAY_NAMES = ["", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+const ACTIVITY_LABELS = { floor: "Sala", class: "Aula", reception: "Receção", assessments: "Avaliações", admin: "Admin", other: "Outro" };
+
+function AttendanceDetailModal({ staffId, staffName, month, onClose }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiRequest(`/attendance/monthly?staff_id=${staffId}&month=${month}`)
+      .then(setRows)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [staffId, month]);
+
+  const presentCount  = rows.filter((r) => r.status === "present").length;
+  const adjustedCount = rows.filter((r) => r.status === "adjusted").length;
+  const absentCount   = rows.filter((r) => r.status === "absent").length;
+  const pendingCount  = rows.filter((r) => r.status === "pending").length;
+  const totalDeducted = rows.reduce((s, r) => s + Number(r.deducted_hours || 0), 0);
+
+  const statusColor = (s) => ({ present: "#4ade80", adjusted: "#f59e0b", absent: "#f87171", pending: "var(--text-secondary)" }[s]);
+  const statusLabel = (s) => ({ present: "Presente", adjusted: "Ajustado", absent: "Falta", pending: "Por confirmar" }[s] || s);
+
+  return (
+    <Modal onClose={onClose}>
+      <GlassCard className="preview-card" strong style={{ maxWidth: 500, width: "100%", maxHeight: "80vh", overflowY: "auto" }}>
+        <h3>{staffName} — <span style={{ textTransform: "capitalize" }}>{monthLabelFull(month)}</span></h3>
+
+        {/* Summary chips */}
+        <div style={{ display: "flex", gap: 8, marginTop: 10, marginBottom: 14, flexWrap: "wrap" }}>
+          {[
+            { label: `${presentCount} presente${presentCount !== 1 ? "s" : ""}`, color: "#4ade80" },
+            adjustedCount > 0 && { label: `${adjustedCount} ajustado${adjustedCount !== 1 ? "s" : ""}`, color: "#f59e0b" },
+            absentCount  > 0 && { label: `${absentCount} falta${absentCount !== 1 ? "s" : ""}`, color: "#f87171" },
+            pendingCount > 0 && { label: `${pendingCount} por confirmar`, color: "var(--text-secondary)" },
+            totalDeducted > 0 && { label: `−${totalDeducted.toFixed(1)}h descontadas`, color: "#f87171" },
+          ].filter(Boolean).map((chip, i) => (
+            <span key={i} className="role-badge role-badge-static" style={{ background: "rgba(255,255,255,0.06)", color: chip.color, fontSize: "0.78rem" }}>
+              {chip.label}
+            </span>
+          ))}
+        </div>
+
+        {loading && <p className="text-secondary">A carregar...</p>}
+        {!loading && rows.length === 0 && <p className="text-secondary">Sem registos de presença para este mês.</p>}
+        {!loading && rows.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            {rows.map((r, i) => (
+              <div key={i} style={{ display: "flex", gap: 10, fontSize: "0.82rem", padding: "5px 8px",
+                borderRadius: 6, background: r.status === "absent" ? "rgba(248,113,113,0.06)" : r.status === "adjusted" ? "rgba(245,158,11,0.06)" : "transparent" }}>
+                <span style={{ minWidth: 56, color: "var(--text-secondary)", fontSize: "0.78rem" }}>
+                  {DAY_NAMES[r.weekday]} {r.shift_date.slice(8)}
+                </span>
+                <span style={{ minWidth: 90 }}>{r.shift_start}–{r.shift_end}</span>
+                <span className="text-secondary" style={{ flex: 1 }}>{ACTIVITY_LABELS[r.activity] || r.activity}</span>
+                <span style={{ fontWeight: 600, color: statusColor(r.status), whiteSpace: "nowrap" }}>
+                  {statusLabel(r.status)}
+                  {Number(r.deducted_hours) > 0 && ` −${Number(r.deducted_hours).toFixed(1)}h`}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="form-actions" style={{ marginTop: 14 }}>
+          <button className="glass-button" onClick={onClose}>Fechar</button>
+        </div>
+      </GlassCard>
+    </Modal>
+  );
+}
+
 // ─── Modal confirmação de pagamento mensal ──────────────────────────────────
 function PayMonthModal({ staff, weekData, month, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
@@ -514,7 +587,15 @@ export default function FinancePage() {
   const [addingWeek, setAddingWeek] = useState(false);
   const [editingWeek, setEditingWeek] = useState(null);
   const [payingMonth, setPayingMonth] = useState(false);
+  const [viewingAttendance, setViewingAttendance] = useState(null); // { id, name }
   const [tab, setTab] = useState("staff");
+  const [expandedWeekIds, setExpandedWeekIds] = useState(new Set());
+
+  function toggleWeekExpand(id) {
+    setExpandedWeekIds((prev) => {
+      const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next;
+    });
+  }
   const [weekMonth, setWeekMonth] = useState(prevMonthYM(currentYM()));
   const [payMonth, setPayMonth] = useState(prevMonthYM(currentYM()));
   function loadWeeks(month) {
@@ -624,7 +705,7 @@ export default function FinancePage() {
 
       <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
         <button className={`glass-button${tab === "staff" ? "" : " glass-button-secondary"}`} onClick={() => setTab("staff")}>Equipa</button>
-        <button className={`glass-button${tab === "weeks" ? "" : " glass-button-secondary"}`} onClick={() => setTab("weeks")}>Registos semanais</button>
+        <button className={`glass-button${tab === "weeks" ? "" : " glass-button-secondary"}`} onClick={() => setTab("weeks")}>Registos</button>
         <button className={`glass-button${tab === "payments" ? "" : " glass-button-secondary"}`} onClick={() => setTab("payments")}>Pagamentos</button>
       </div>
 
@@ -722,48 +803,100 @@ export default function FinancePage() {
               </button>
             )}
           </div>
-          {weeks.length === 0 && <p className="text-secondary">Ainda não há registos para este mês.</p>}
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {weeks.map((w) => {
-              const { gross, cut, net, absent_deduction } = calcWeekEarnings(w);
+          {weeks.length === 0 && <p className="text-secondary">Ainda não há registos para este mês. Usa "+ Registar semana" para adicionar.</p>}
+
+          {/* Monthly aggregates — one card per staff member */}
+          {(() => {
+            const staffIds = [...new Set(weeks.map((w) => w.staff_id))];
+            return staffIds.map((staffId) => {
+              const sw = weeks.filter((w) => w.staff_id === staffId);
+              const first = sw[0];
+              const hSala = sw.reduce((a, w) => a + Number(w.hours_sala || 0), 0);
+              const hRec  = sw.reduce((a, w) => a + Number(w.hours_reception || 0), 0);
+              const hCls  = sw.reduce((a, w) => a + Number(w.hours_class || 0), 0);
+              const clients = Math.max(...sw.map((w) => Number(w.pt_clients_count || 0)));
+              const abH = sw.reduce((a, w) => a + Number(w.absent_hours || 0), 0);
+              const abD = sw.reduce((a, w) => a + Number(w.absent_deduction || 0), 0);
+              const staffData = staffList.find((s) => String(s.id) === String(staffId)) || first;
+              const { gross, cut, net } = calcEarnings({
+                ...staffData,
+                hours_reception: hRec, hours_sala: hSala, hours_class: hCls, pt_clients_count: clients,
+                month_hours_reception: hRec, month_hours_sala: hSala, month_hours_class: hCls, month_pt_clients: clients,
+              });
+              const isExpanded = expandedWeekIds.has(staffId);
               return (
-                <GlassCard key={w.id} style={{ padding: "14px 18px" }}>
+                <GlassCard key={staffId} style={{ padding: "14px 18px", marginBottom: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
-                    <div>
-                      <strong>{w.staff_name}</strong>
-                      <span className="text-secondary" style={{ marginLeft: 8, fontSize: "0.8rem" }}>{ROLE_LABELS[w.staff_role] || w.staff_role}</span>
-                      <div className="text-secondary" style={{ fontSize: "0.82rem", marginTop: 2 }}>{weekLabel(w.week_start)}</div>
-                      <div style={{ fontSize: "0.8rem", marginTop: 4, color: "var(--text-secondary)" }}>
-                        {w.hours_reception > 0 && `Recep. ${w.hours_reception}h  `}
-                        {w.hours_sala > 0 && `Sala ${w.hours_sala}h  `}
-                        {w.hours_class > 0 && `Aulas ${w.hours_class}h  `}
-                        {w.pt_clients_count > 0 && `PT ${w.pt_clients_count} clientes`}
+                    <div style={{ flex: 1 }}>
+                      {/* Clickable name → attendance modal */}
+                      <button type="button" style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
+                        onClick={() => setViewingAttendance({ id: staffId, name: first.staff_name })}>
+                        <strong style={{ fontSize: "1rem", borderBottom: "1px dotted rgba(255,255,255,0.4)" }}>{first.staff_name}</strong>
+                      </button>
+                      <span className="text-secondary" style={{ marginLeft: 8, fontSize: "0.8rem" }}>{ROLE_LABELS[first.staff_role] || first.staff_role}</span>
+                      <div style={{ fontSize: "0.82rem", marginTop: 6, color: "var(--text-secondary)", display: "flex", gap: 12, flexWrap: "wrap" }}>
+                        {hSala > 0 && <span>Sala <strong style={{ color: "var(--text-primary)" }}>{hSala}h</strong></span>}
+                        {hRec > 0  && <span>Rec. <strong style={{ color: "var(--text-primary)" }}>{hRec}h</strong></span>}
+                        {hCls > 0  && <span>Aulas <strong style={{ color: "var(--text-primary)" }}>{hCls}h</strong></span>}
+                        {clients > 0 && <span>{clients} clientes PT</span>}
+                        {abH > 0 && <span style={{ color: "#f87171" }}>−{abH}h falta{abH !== 1 ? "s" : ""}</span>}
                       </div>
                     </div>
-                    <div style={{ textAlign: "right", fontSize: "0.85rem" }}>
-                      <div>Bruto: {fmtEuro(gross)}</div>
-                      {cut > 0 && <div style={{ color: "#4ade80" }}>Ginásio: {fmtEuro(cut)}</div>}
-                      {absent_deduction > 0 && <div style={{ color: "#f87171" }}>Faltas: – {fmtEuro(absent_deduction)}</div>}
-                      <strong>A pagar: {fmtEuro(net)}</strong>
+                    <div style={{ textAlign: "right", fontSize: "0.85rem", flexShrink: 0 }}>
+                      <div className="text-secondary">Bruto: {fmtEuro(gross)}</div>
+                      {cut > 0 && <div style={{ color: "#4ade80" }}>–{fmtEuro(cut)}</div>}
+                      {abD > 0 && <div style={{ color: "#f87171" }}>Faltas: –{fmtEuro(abD)}</div>}
+                      <strong style={{ fontSize: "1rem" }}>{fmtEuro(net)}</strong>
                     </div>
                   </div>
-                  {w.notes && <p className="text-secondary" style={{ fontSize: "0.82rem", marginTop: 6 }}>{w.notes}</p>}
-                  <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    {w.confirmed && (
-                      <span className="role-badge role-badge-static" style={{ background: "rgba(34,197,94,0.18)", color: "#4ade80" }}>
-                        ✓ Confirmado por {w.confirmed_by_name} · {fmtDate(w.confirmed_at)}
-                      </span>
-                    )}
+
+                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                     <button type="button" className="glass-button glass-button-secondary"
-                      style={{ fontSize: "0.82rem", padding: "4px 12px" }}
-                      onClick={() => setEditingWeek(w)}>
-                      Editar
+                      style={{ fontSize: "0.78rem", padding: "3px 10px" }}
+                      onClick={() => toggleWeekExpand(staffId)}>
+                      {isExpanded ? "▲ Ocultar semanas" : "▼ Ver semanas"}
+                    </button>
+                    <button type="button" className="glass-button glass-button-secondary"
+                      style={{ fontSize: "0.78rem", padding: "3px 10px" }}
+                      onClick={() => setViewingAttendance({ id: staffId, name: first.staff_name })}>
+                      Ver presenças
                     </button>
                   </div>
+
+                  {/* Expandable weekly rows */}
+                  {isExpanded && (
+                    <div style={{ marginTop: 10, borderTop: "1px solid var(--glass-border)", paddingTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                      {sw.map((w) => {
+                        const we = calcWeekEarnings(w);
+                        return (
+                          <div key={w.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", padding: "4px 0", borderBottom: "1px solid var(--glass-border)" }}>
+                            <div>
+                              <span className="text-secondary">{weekLabel(w.week_start)}</span>
+                              <div className="text-secondary" style={{ fontSize: "0.76rem", marginTop: 2 }}>
+                                {Number(w.hours_sala) > 0 && `Sala ${w.hours_sala}h  `}
+                                {Number(w.hours_reception) > 0 && `Rec. ${w.hours_reception}h  `}
+                                {Number(w.hours_class) > 0 && `Aulas ${w.hours_class}h  `}
+                                {Number(w.pt_clients_count) > 0 && `${w.pt_clients_count} clientes PT`}
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                              <div style={{ textAlign: "right" }}>
+                                {we.absent_deduction > 0 && <div style={{ color: "#f87171", fontSize: "0.76rem" }}>–{fmtEuro(we.absent_deduction)}</div>}
+                                <span>{fmtEuro(we.net)}</span>
+                              </div>
+                              <button type="button" className="glass-button glass-button-secondary"
+                                style={{ fontSize: "0.76rem", padding: "2px 8px" }}
+                                onClick={() => setEditingWeek(w)}>Editar</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </GlassCard>
               );
-            })}
-          </div>
+            });
+          })()}
         </>
       )}
 
@@ -818,6 +951,14 @@ export default function FinancePage() {
 
       {editingRates && (
         <RatesModal staff={editingRates} onClose={() => setEditingRates(null)} onSaved={load} />
+      )}
+      {viewingAttendance && (
+        <AttendanceDetailModal
+          staffId={viewingAttendance.id}
+          staffName={viewingAttendance.name}
+          month={weekMonth}
+          onClose={() => setViewingAttendance(null)}
+        />
       )}
       {(addingWeek || editingWeek) && (
         <AddWeekModal

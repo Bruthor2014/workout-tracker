@@ -103,4 +103,28 @@ async function getWeekSummary(req, res) {
   res.json({ activities: result.rows, total_absent_hours: totalAbsentHours });
 }
 
-module.exports = { listDaily, upsertAttendance, getWeekSummary };
+// GET /api/attendance/monthly?staff_id=X&month=YYYY-MM
+// Returns all attendance records for a staff member in a month.
+async function getMonthlyAttendance(req, res) {
+  const { staff_id, month } = req.query;
+  if (!staff_id || !month) return res.status(400).json({ message: "staff_id e month são obrigatórios." });
+
+  const result = await pool.query(
+    `SELECT to_char(sa.shift_date,'YYYY-MM-DD') AS shift_date,
+            EXTRACT(ISODOW FROM sa.shift_date)::int AS weekday,
+            to_char(sa.shift_start,'HH24:MI') AS shift_start,
+            to_char(sa.shift_end,'HH24:MI') AS shift_end,
+            sa.activity, sa.status, sa.deducted_hours, sa.adjustments, sa.notes,
+            cb.name AS confirmed_by_name, sa.confirmed_at
+       FROM staff_attendance sa
+       LEFT JOIN users cb ON cb.id = sa.confirmed_by
+      WHERE sa.gym_id=$1 AND sa.staff_id=$2
+        AND sa.shift_date >= ($3 || '-01')::date
+        AND sa.shift_date < ($3 || '-01')::date + INTERVAL '1 month'
+      ORDER BY sa.shift_date, sa.shift_start`,
+    [req.user.gymId, Number(staff_id), month]
+  );
+  res.json(result.rows);
+}
+
+module.exports = { listDaily, upsertAttendance, getWeekSummary, getMonthlyAttendance };
