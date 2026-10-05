@@ -176,7 +176,7 @@ export default function App() {
         <Route
           path="/team-schedule"
           element={
-            <RequireRole roles={["gym_owner"]}>
+            <RequireRole roles={["gym_owner", "receptionist"]}>
               <TeamSchedulePage />
             </RequireRole>
           }

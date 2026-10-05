@@ -185,6 +185,18 @@ export default function Sidebar() {
                 </NavLink>
                 {user.role === "receptionist" && (
                   <>
+                    <NavLink to="/classes" className={NAV_LINK_CLASS}>
+                      <span className="sidebar-link-icon">
+                        <IconCalendar size={24} />
+                      </span>
+                      Aulas de grupo
+                    </NavLink>
+                    <NavLink to="/team-schedule" className={NAV_LINK_CLASS}>
+                      <span className="sidebar-link-icon">
+                        <IconClock size={24} />
+                      </span>
+                      Horário da equipa
+                    </NavLink>
                     <NavLink to="/occupancy" className={NAV_LINK_CLASS}>
                       <span className="sidebar-link-icon">
                         <IconClipboard size={24} />

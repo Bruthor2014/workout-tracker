@@ -198,97 +198,90 @@ function DayTimetable({ shifts, isToday, onShiftClick }) {
     present: "#4ade80", adjusted: "#f59e0b", absent: "#f87171", pending: "var(--text-secondary)"
   }[s]);
 
+  const pct = (m) => `${((m - rangeStart) / totalMins) * 100}%`;
+
   return (
-    <GlassCard style={{ padding: "14px 16px", overflowX: "auto" }}>
+    <GlassCard style={{ padding: "14px 16px" }}>
       {/* Hour markers */}
-      <div style={{ position: "relative", height: 20, marginLeft: 110, marginBottom: 4 }}>
-        {hours.map((m) => (
-          <div key={m} style={{
-            position: "absolute",
-            left: `${((m - rangeStart) / totalMins) * 100}%`,
-            fontSize: "0.72rem", color: "var(--text-secondary)",
-            transform: "translateX(-50%)",
-          }}>
-            {fmtHour(m)}
-          </div>
-        ))}
+      <div style={{ display: "flex", marginBottom: 6 }}>
+        <div style={{ width: 110, flexShrink: 0 }} />
+        <div style={{ flex: 1, position: "relative", height: 20 }}>
+          {hours.map((m) => (
+            <div key={m} style={{
+              position: "absolute",
+              left: pct(m),
+              fontSize: "0.72rem", color: "var(--text-secondary)",
+              transform: "translateX(-50%)",
+            }}>
+              {fmtHour(m)}
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Grid lines + shift rows */}
-      <div style={{ position: "relative" }}>
-        {/* Vertical hour lines */}
-        {hours.map((m) => (
-          <div key={m} style={{
-            position: "absolute",
-            left: `calc(110px + ${((m - rangeStart) / totalMins) * (100)}%)`,
-            top: 0, bottom: 0,
-            width: 1, background: "rgba(255,255,255,0.07)",
-            pointerEvents: "none",
-          }} />
-        ))}
+      {/* Staff rows — grid lines live inside each timeline div */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {shifts.map((shift, i) => {
+          const startPct = pct(toMin(shift.shift_start));
+          const widthPct = `${((toMin(shift.shift_end) - toMin(shift.shift_start)) / totalMins) * 100}%`;
 
-        {/* Staff rows */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {shifts.map((shift, i) => {
-            const startPct = ((toMin(shift.shift_start) - rangeStart) / totalMins) * 100;
-            const widthPct = ((toMin(shift.shift_end) - toMin(shift.shift_start)) / totalMins) * 100;
-            const isClickable = isToday;
-
-            return (
-              <div key={i} style={{ display: "flex", alignItems: "center", minHeight: 46 }}>
-                {/* Staff name label */}
-                <div style={{ width: 110, flexShrink: 0, paddingRight: 10 }}>
-                  <div style={{ fontSize: "0.83rem", fontWeight: 600, lineHeight: 1.2 }}>
-                    {shift.staff_name.split(" ")[0]}
-                  </div>
-                  <div className="text-secondary" style={{ fontSize: "0.7rem" }}>
-                    {ROLE_LABELS[shift.staff_role] || shift.staff_role}
-                  </div>
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "center", minHeight: 46 }}>
+              {/* Name */}
+              <div style={{ width: 110, flexShrink: 0, paddingRight: 10 }}>
+                <div style={{ fontSize: "0.83rem", fontWeight: 600, lineHeight: 1.2 }}>
+                  {shift.staff_name.split(" ")[0]}
                 </div>
-
-                {/* Timeline */}
-                <div style={{ flex: 1, position: "relative", height: 44, minWidth: 0 }}>
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: `${startPct}%`,
-                      width: `${widthPct}%`,
-                      top: 2, bottom: 2,
-                      background: statusBg(shift.status),
-                      border: `1.5px solid ${statusBorder(shift.status)}`,
-                      borderRadius: 8,
-                      cursor: isClickable ? "pointer" : "default",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 6,
-                      padding: "0 8px",
-                      overflow: "hidden",
-                      transition: "filter 0.15s",
-                    }}
-                    onClick={() => isClickable && onShiftClick(shift)}
-                    title={`${shift.shift_start}–${shift.shift_end} · ${ACTIVITY_LABELS[shift.activity] || shift.activity}`}
-                  >
-                    <span style={{ fontSize: "0.78rem", fontWeight: 600, color: statusColor(shift.status), flexShrink: 0 }}>
-                      {statusIcon(shift.status)}
-                    </span>
-                    <span style={{ fontSize: "0.78rem", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {shift.shift_start}–{shift.shift_end}
-                    </span>
-                    <span className="text-secondary" style={{ fontSize: "0.72rem", flexShrink: 0 }}>
-                      {ACTIVITY_LABELS[shift.activity]?.slice(0,3) || shift.activity.slice(0,3)}
-                    </span>
-                    {Number(shift.deducted_hours) > 0 && (
-                      <span style={{ fontSize: "0.7rem", color: "#f87171", flexShrink: 0 }}>
-                        −{Number(shift.deducted_hours).toFixed(1)}h
-                      </span>
-                    )}
-                  </div>
+                <div className="text-secondary" style={{ fontSize: "0.7rem" }}>
+                  {ROLE_LABELS[shift.staff_role] || shift.staff_role}
                 </div>
               </div>
-            );
-          })}
-        </div>
+
+              {/* Timeline */}
+              <div style={{ flex: 1, position: "relative", height: 44, minWidth: 0 }}>
+                {/* Grid lines constrained to this div — no overflow */}
+                {hours.map((m) => (
+                  <div key={m} style={{
+                    position: "absolute", left: pct(m),
+                    top: 0, bottom: 0, width: 1,
+                    background: "rgba(255,255,255,0.07)", pointerEvents: "none",
+                  }} />
+                ))}
+                {/* Shift bar */}
+                <div
+                  style={{
+                    position: "absolute",
+                    left: startPct, width: widthPct,
+                    top: 2, bottom: 2,
+                    background: statusBg(shift.status),
+                    border: `1.5px solid ${statusBorder(shift.status)}`,
+                    borderRadius: 8,
+                    cursor: isToday ? "pointer" : "default",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    gap: 6, padding: "0 8px", overflow: "hidden",
+                  }}
+                  onClick={() => isToday && onShiftClick(shift)}
+                  title={`${shift.shift_start}–${shift.shift_end} · ${ACTIVITY_LABELS[shift.activity] || shift.activity}`}
+                >
+                  <span style={{ fontSize: "0.78rem", fontWeight: 600, color: statusColor(shift.status), flexShrink: 0 }}>
+                    {statusIcon(shift.status)}
+                  </span>
+                  <span style={{ fontSize: "0.78rem", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {shift.shift_start}–{shift.shift_end}
+                  </span>
+                  <span className="text-secondary" style={{ fontSize: "0.72rem", flexShrink: 0 }}>
+                    {ACTIVITY_LABELS[shift.activity]?.slice(0,3) || shift.activity.slice(0,3)}
+                  </span>
+                  {Number(shift.deducted_hours) > 0 && (
+                    <span style={{ fontSize: "0.7rem", color: "#f87171", flexShrink: 0 }}>
+                      −{Number(shift.deducted_hours).toFixed(1)}h
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {isToday && (
