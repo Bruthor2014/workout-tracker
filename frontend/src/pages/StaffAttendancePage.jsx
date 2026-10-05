@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import GlassCard from "../components/GlassCard";
 import Modal from "../components/Modal";
 import { apiRequest } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 import { ROLE_LABELS } from "../utils/roles";
 
 const ACTIVITY_LABELS = {
@@ -302,7 +304,11 @@ function DayTimetable({ shifts, isToday, onShiftClick }) {
 const TODAY_SV = new Date().toLocaleDateString("sv");
 
 export default function StaffAttendancePage() {
-  const [date, setDate] = useState(TODAY_SV);
+  const [searchParams] = useSearchParams();
+  const { user } = useAuth();
+  const isOwner = user?.role === "gym_owner";
+
+  const [date, setDate] = useState(searchParams.get("date") || TODAY_SV);
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -319,6 +325,7 @@ export default function StaffAttendancePage() {
   useEffect(() => { loadShifts(date); }, [date]);
 
   const isToday = date === TODAY_SV;
+  const isEditable = isOwner || isToday;
 
   // Summary counts
   const counts = shifts.reduce((acc, s) => {
@@ -340,7 +347,7 @@ export default function StaffAttendancePage() {
           {isToday && <span style={{ marginLeft: 8, fontSize: "0.72rem", color: "#a78bfa" }}>(hoje)</span>}
         </span>
         <button className="glass-button glass-button-secondary" style={{ padding: "4px 10px" }}
-          disabled={date >= TODAY_SV} onClick={() => setDate(nextDay(date))}>›</button>
+          disabled={!isOwner && date >= TODAY_SV} onClick={() => setDate(nextDay(date))}>›</button>
       </div>
 
       {/* Status summary chips */}
@@ -353,7 +360,7 @@ export default function StaffAttendancePage() {
         </div>
       )}
 
-      {!isToday && (
+      {!isEditable && (
         <div style={{ padding: "8px 12px", marginBottom: 12, borderRadius: 8,
           background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.3)" }}>
           <span style={{ fontSize: "0.83rem", color: "#f59e0b" }}>
@@ -368,7 +375,7 @@ export default function StaffAttendancePage() {
       {!loading && (
         <DayTimetable
           shifts={shifts}
-          isToday={isToday}
+          isToday={isEditable}
           onShiftClick={setAdjusting}
         />
       )}

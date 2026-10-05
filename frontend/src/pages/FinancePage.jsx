@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import GlassCard from "../components/GlassCard";
 import Modal from "../components/Modal";
 import { apiRequest, resolveAssetUrl } from "../api/client";
 import { ROLE_LABELS } from "../utils/roles";
 
-function toMinutes(t) { const [h, m] = t.split(":").map(Number); return h * 60 + m; }
-
+// ─── Helpers ───────────────────────────────────────────────────────────────
 function prevMonthYM(ym) {
   const [y, m] = ym.split("-").map(Number);
   const d = new Date(y, m - 2, 1);
@@ -24,37 +24,22 @@ function monthLabelFull(ym) {
   const [y, m] = ym.split("-").map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
 }
-
-const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-
 function fmtDate(str) {
   if (!str) return "";
+  const MONTHS = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
   const d = new Date(`${str}T00:00:00`);
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
-
 function fmtEuro(n) {
   return Number(n || 0).toFixed(2).replace(".", ",") + " €";
 }
 
-function weekLabel(weekStart) {
-  const d = new Date(`${weekStart}T00:00:00`);
-  const end = new Date(d);
-  end.setDate(end.getDate() + 6);
-  return `${d.getDate()} ${MONTHS[d.getMonth()]} – ${end.getDate()} ${MONTHS[end.getMonth()]}`;
-}
+const DAY_NAMES = ["", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+const ACTIVITY_LABELS = { floor: "Sala", class: "Aula", reception: "Receção", assessments: "Avaliações", admin: "Admin", other: "Outro" };
 
-function getMondayOfWeek(date = new Date()) {
-  const d = new Date(date);
-  const day = d.getDay();
-  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-// Retenção aplica-se apenas às receitas de clientes PT (não ao salário base nem
-// às taxas horárias de trabalho do ginásio).
-function calcEarnings(r) {
-  const clients = Number(r.pt_clients_count || r.month_pt_clients || 0);
+// Hours worked already exclude absent time — pay is simply rate × hours_worked.
+function calcEarnings(r, ptClientsOverride) {
+  const clients = ptClientsOverride != null ? Number(ptClientsOverride) : Number(r.pt_clients_count || r.month_pt_clients || 0);
   const pt_earnings = Number(r.rate_pt_month || 0) * clients;
   const other =
     Number(r.base_salary || 0) +
@@ -62,31 +47,10 @@ function calcEarnings(r) {
     Number(r.rate_sala_h || 0)      * Number(r.hours_sala      || r.month_hours_sala      || 0) +
     Number(r.rate_class_h || 0)     * Number(r.hours_class     || r.month_hours_class     || 0);
   const gross = other + pt_earnings;
-
   let cut = 0;
-  if (r.gym_cut_pct != null)   cut = pt_earnings * Number(r.gym_cut_pct) / 100;
+  if (r.gym_cut_pct != null)        cut = pt_earnings * Number(r.gym_cut_pct) / 100;
   else if (r.gym_cut_fixed != null) cut = clients * Number(r.gym_cut_fixed);
-
   return { gross, cut, net: gross - cut, pt_earnings };
-}
-
-// Ganhos semanais (base_salary ÷ 4 para estimar a semana; PT/Mês ÷ 4 igualmente).
-function calcWeekEarnings(w) {
-  const clients = Number(w.pt_clients_count || 0);
-  const pt_earnings = Number(w.rate_pt_month || 0) * clients / 4;
-  const other =
-    Number(w.base_salary || 0) / 4 +
-    Number(w.rate_reception_h || 0) * Number(w.hours_reception || 0) +
-    Number(w.rate_sala_h || 0)      * Number(w.hours_sala      || 0) +
-    Number(w.rate_class_h || 0)     * Number(w.hours_class     || 0);
-  const gross = other + pt_earnings;
-
-  let cut = 0;
-  if (w.gym_cut_pct != null)        cut = pt_earnings * Number(w.gym_cut_pct) / 100;
-  else if (w.gym_cut_fixed != null) cut = clients * Number(w.gym_cut_fixed) / 4;
-
-  const absent_deduction = Number(w.absent_deduction || 0);
-  return { gross, cut, net: gross - cut - absent_deduction, pt_earnings, absent_deduction };
 }
 
 // ─── Modal taxas ───────────────────────────────────────────────────────────
@@ -103,13 +67,11 @@ function RatesModal({ staff, onClose, onSaved }) {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-
-  function set(k, v) { setForm((prev) => ({ ...prev, [k]: v })); }
+  function set(k, v) { setForm((p) => ({ ...p, [k]: v })); }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setSaving(true);
-    setError("");
+    setSaving(true); setError("");
     const body = {
       base_salary:      Number(form.base_salary),
       rate_reception_h: Number(form.rate_reception_h),
@@ -121,20 +83,16 @@ function RatesModal({ staff, onClose, onSaved }) {
     };
     try {
       await apiRequest(`/finance/rates/${staff.id}`, { method: "PUT", body });
-      onSaved();
-      onClose();
-    } catch (err) {
-      setError(err.message);
-      setSaving(false);
-    }
+      onSaved(); onClose();
+    } catch (err) { setError(err.message); setSaving(false); }
   }
 
-  const field = (label, key, placeholder = "0") => (
+  const field = (label, key) => (
     <div className="form-row" style={{ marginTop: 10 }}>
       <label className="field-label">{label}</label>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <input type="number" min="0" step="0.01" className="glass-input" style={{ flex: 1 }}
-          value={form[key]} onChange={(e) => set(key, e.target.value)} placeholder={placeholder} required />
+          value={form[key]} onChange={(e) => set(key, e.target.value)} required />
         <span className="text-secondary" style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>€</span>
       </div>
     </div>
@@ -150,7 +108,6 @@ function RatesModal({ staff, onClose, onSaved }) {
           {field("Sala (€/h)", "rate_sala_h")}
           {field("Aula de grupo (€/h)", "rate_class_h")}
           {field("PT (€/mês por cliente)", "rate_pt_month")}
-
           <div className="form-row" style={{ marginTop: 14 }}>
             <label className="field-label">Retenção do ginásio</label>
             <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
@@ -178,7 +135,6 @@ function RatesModal({ staff, onClose, onSaved }) {
               </div>
             )}
           </div>
-
           {error && <p className="error-text">{error}</p>}
           <div className="form-actions">
             <button type="button" className="glass-button glass-button-secondary" onClick={onClose}>Cancelar</button>
@@ -190,228 +146,40 @@ function RatesModal({ staff, onClose, onSaved }) {
   );
 }
 
-// ─── Modal registo semanal ──────────────────────────────────────────────────
-function AddWeekModal({ staffList, onClose, onSaved, editingWeek }) {
-  const isEditing = !!editingWeek;
-  const [staffId, setStaffId] = useState(isEditing ? String(editingWeek.staff_id) : "");
-  const [weekStart, setWeekStart] = useState(isEditing ? editingWeek.week_start : getMondayOfWeek());
-  const [form, setForm] = useState(isEditing ? {
-    hours_reception: String(editingWeek.hours_reception || "0"),
-    hours_sala:      String(editingWeek.hours_sala      || "0"),
-    hours_class:     String(editingWeek.hours_class     || "0"),
-    pt_clients_count: String(editingWeek.pt_clients_count || "0"),
-    absent_hours:    String(editingWeek.absent_hours    || "0"),
-    absent_deduction: String(editingWeek.absent_deduction || "0"),
-    notes: editingWeek.notes || "",
-  } : { hours_reception: "0", hours_sala: "0", hours_class: "0", pt_clients_count: "0", absent_hours: "0", absent_deduction: "0", notes: "" });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [absenceHint, setAbsenceHint] = useState(null);
-
-  function set(k, v) { setForm((p) => ({ ...p, [k]: v })); }
-
-  // Quando muda staff: pré-preencher horas a partir dos turnos semanais (só no modo criação).
-  useEffect(() => {
-    if (isEditing || !staffId) return;
-    apiRequest("/shifts").then((allShifts) => {
-      const mine = allShifts.filter((s) => String(s.staff_id) === String(staffId));
-      const hSala = mine.filter((s) => s.activity !== "reception" && s.activity !== "class")
-        .reduce((a, s) => a + (toMinutes(s.end_time) - toMinutes(s.start_time)) / 60, 0);
-      const hRec  = mine.filter((s) => s.activity === "reception")
-        .reduce((a, s) => a + (toMinutes(s.end_time) - toMinutes(s.start_time)) / 60, 0);
-      const hCls  = mine.filter((s) => s.activity === "class")
-        .reduce((a, s) => a + (toMinutes(s.end_time) - toMinutes(s.start_time)) / 60, 0);
-      set("hours_sala",      String(Math.round(hSala * 10) / 10));
-      set("hours_reception", String(Math.round(hRec  * 10) / 10));
-      set("hours_class",     String(Math.round(hCls  * 10) / 10));
-    }).catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [staffId]);
-
-  // Quando muda staff ou semana, vai buscar as faltas automáticas (só no modo criação).
-  useEffect(() => {
-    if (isEditing || !staffId || !weekStart) { setAbsenceHint(null); return; }
-    apiRequest(`/occupancy/absences?week=${weekStart}`)
-      .then((rows) => {
-        const mine = rows.filter((r) => String(r.staff_id) === String(staffId) && r.was_absent);
-        const totalHours = mine.reduce((s, r) => s + Number(r.shift_hours), 0);
-        const totalDeduction = mine.reduce((s, r) => s + Number(r.shift_hours) * Number(r.hourly_rate), 0);
-        if (mine.length > 0) {
-          setAbsenceHint({ count: mine.length, hours: totalHours.toFixed(1), deduction: totalDeduction.toFixed(2) });
-          set("absent_hours", totalHours.toFixed(2));
-          set("absent_deduction", totalDeduction.toFixed(2));
-        } else {
-          setAbsenceHint(null);
-          set("absent_hours", "0");
-          set("absent_deduction", "0");
-        }
-      })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [staffId, weekStart]);
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    if (!staffId) return setError("Escolhe um membro da equipa.");
-    setSaving(true);
-    setError("");
-    try {
-      await apiRequest("/finance/weeks", {
-        method: "POST",
-        body: {
-          staff_id: Number(staffId), week_start: weekStart,
-          hours_reception: Number(form.hours_reception), hours_sala: Number(form.hours_sala),
-          hours_class: Number(form.hours_class), pt_clients_count: Number(form.pt_clients_count),
-          absent_hours: Number(form.absent_hours), absent_deduction: Number(form.absent_deduction),
-          notes: form.notes || null,
-        },
-      });
-      onSaved();
-      onClose();
-    } catch (err) {
-      setError(err.message);
-      setSaving(false);
-    }
-  }
-
-  const hr = (label, key, step = "0.5") => (
-    <div className="form-row" style={{ marginTop: 10 }}>
-      <label className="field-label">{label}</label>
-      <input type="number" min="0" step={step} className="glass-input"
-        value={form[key]} onChange={(e) => set(key, e.target.value)} required />
-    </div>
-  );
-
-  return (
-    <Modal onClose={onClose}>
-      <GlassCard className="preview-card" strong style={{ maxWidth: 400, width: "100%" }}>
-        <h3>{isEditing ? `Editar semana — ${editingWeek.staff_name}` : "Registar semana"}</h3>
-        {isEditing && editingWeek.confirmed && (
-          <p style={{ fontSize: "0.82rem", color: "#f87171", margin: "6px 0 0" }}>
-            Editar vai remover a confirmação desta semana.
-          </p>
-        )}
-        <form onSubmit={handleSubmit} style={{ marginTop: 14 }}>
-          {!isEditing && (
-            <div className="form-row">
-              <label className="field-label">Membro da equipa</label>
-              <select className="glass-input" value={staffId} onChange={(e) => setStaffId(e.target.value)}
-                style={{ color: "var(--text-primary)", background: "var(--glass-bg)" }}>
-                <option value="">— Escolher —</option>
-                {staffList.map((s) => <option key={s.id} value={s.id}>{s.name} ({ROLE_LABELS[s.role] || s.role})</option>)}
-              </select>
-            </div>
-          )}
-          {!isEditing && (
-            <div className="form-row" style={{ marginTop: 10 }}>
-              <label className="field-label">Semana</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <button type="button" className="glass-button glass-button-secondary" style={{ padding: "4px 10px" }}
-                  onClick={() => {
-                    const d = new Date(`${weekStart}T00:00:00`);
-                    d.setDate(d.getDate() - 7);
-                    setWeekStart(d.toLocaleDateString("sv"));
-                  }}>‹</button>
-                <span style={{ flex: 1, textAlign: "center", fontSize: "0.9rem" }}>{weekLabel(weekStart)}</span>
-                <button type="button" className="glass-button glass-button-secondary" style={{ padding: "4px 10px" }}
-                  onClick={() => {
-                    const d = new Date(`${weekStart}T00:00:00`);
-                    d.setDate(d.getDate() + 7);
-                    setWeekStart(d.toLocaleDateString("sv"));
-                  }}>›</button>
-              </div>
-            </div>
-          )}
-          {isEditing && (
-            <div className="form-row">
-              <label className="field-label">Semana</label>
-              <span className="glass-input" style={{ display: "block", opacity: 0.7, cursor: "default" }}>
-                {weekLabel(weekStart)}
-              </span>
-            </div>
-          )}
-          {hr("Horas de receção", "hours_reception")}
-          {hr("Horas de sala", "hours_sala")}
-          {hr("Horas de aulas de grupo", "hours_class")}
-          <div className="form-row" style={{ marginTop: 10 }}>
-            <label className="field-label">Nº clientes PT activos</label>
-            <input type="number" min="0" className="glass-input"
-              value={form.pt_clients_count} onChange={(e) => set("pt_clients_count", e.target.value)} required />
-          </div>
-
-          <div style={{ marginTop: 14, borderTop: "1px solid var(--glass-border)", paddingTop: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <label className="field-label" style={{ margin: 0 }}>Faltas</label>
-              {absenceHint && (
-                <span style={{ fontSize: "0.78rem", color: "#f87171" }}>
-                  {absenceHint.count} turno(s) em falta · {absenceHint.hours}h · auto
-                </span>
-              )}
-            </div>
-            {hr("Horas em falta", "absent_hours")}
-            <div className="form-row" style={{ marginTop: 10 }}>
-              <label className="field-label">Desconto por faltas (€)</label>
-              <input type="number" min="0" step="0.01" className="glass-input"
-                value={form.absent_deduction} onChange={(e) => set("absent_deduction", e.target.value)} required />
-            </div>
-          </div>
-
-          <div className="form-row" style={{ marginTop: 10 }}>
-            <label className="field-label">Notas (opcional)</label>
-            <input type="text" className="glass-input" value={form.notes}
-              onChange={(e) => set("notes", e.target.value)} />
-          </div>
-          {error && <p className="error-text">{error}</p>}
-          <div className="form-actions">
-            <button type="button" className="glass-button glass-button-secondary" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="glass-button" disabled={saving}>{saving ? "A guardar..." : "Guardar"}</button>
-          </div>
-        </form>
-      </GlassCard>
-    </Modal>
-  );
-}
-
-// ─── Modal detalhe de presenças mensais ────────────────────────────────────
-const DAY_NAMES = ["", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-const ACTIVITY_LABELS = { floor: "Sala", class: "Aula", reception: "Receção", assessments: "Avaliações", admin: "Admin", other: "Outro" };
-
-function AttendanceDetailModal({ staffId, staffName, month, onClose }) {
+// ─── Modal registos mensais de um staff (com link para editar cada dia) ────
+function StaffMonthModal({ staffId, staffName, month, onClose }) {
+  const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     apiRequest(`/attendance/monthly?staff_id=${staffId}&month=${month}`)
-      .then(setRows)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      .then(setRows).catch(() => {}).finally(() => setLoading(false));
   }, [staffId, month]);
 
-  const presentCount  = rows.filter((r) => r.status === "present").length;
-  const adjustedCount = rows.filter((r) => r.status === "adjusted").length;
-  const absentCount   = rows.filter((r) => r.status === "absent").length;
-  const pendingCount  = rows.filter((r) => r.status === "pending").length;
-  const totalDeducted = rows.reduce((s, r) => s + Number(r.deducted_hours || 0), 0);
+  const present  = rows.filter((r) => r.status === "present").length;
+  const adjusted = rows.filter((r) => r.status === "adjusted").length;
+  const absent   = rows.filter((r) => r.status === "absent").length;
+  const pending  = rows.filter((r) => r.status === "pending").length;
 
   const statusColor = (s) => ({ present: "#4ade80", adjusted: "#f59e0b", absent: "#f87171", pending: "var(--text-secondary)" }[s]);
   const statusLabel = (s) => ({ present: "Presente", adjusted: "Ajustado", absent: "Falta", pending: "Por confirmar" }[s] || s);
 
   return (
     <Modal onClose={onClose}>
-      <GlassCard className="preview-card" strong style={{ maxWidth: 500, width: "100%", maxHeight: "80vh", overflowY: "auto" }}>
+      <GlassCard className="preview-card" strong style={{ maxWidth: 520, width: "100%", maxHeight: "82vh", overflowY: "auto" }}>
         <h3>{staffName} — <span style={{ textTransform: "capitalize" }}>{monthLabelFull(month)}</span></h3>
 
-        {/* Summary chips */}
         <div style={{ display: "flex", gap: 8, marginTop: 10, marginBottom: 14, flexWrap: "wrap" }}>
           {[
-            { label: `${presentCount} presente${presentCount !== 1 ? "s" : ""}`, color: "#4ade80" },
-            adjustedCount > 0 && { label: `${adjustedCount} ajustado${adjustedCount !== 1 ? "s" : ""}`, color: "#f59e0b" },
-            absentCount  > 0 && { label: `${absentCount} falta${absentCount !== 1 ? "s" : ""}`, color: "#f87171" },
-            pendingCount > 0 && { label: `${pendingCount} por confirmar`, color: "var(--text-secondary)" },
-            totalDeducted > 0 && { label: `−${totalDeducted.toFixed(1)}h descontadas`, color: "#f87171" },
-          ].filter(Boolean).map((chip, i) => (
-            <span key={i} className="role-badge role-badge-static" style={{ background: "rgba(255,255,255,0.06)", color: chip.color, fontSize: "0.78rem" }}>
-              {chip.label}
+            present  > 0 && { label: `${present} presente${present !== 1 ? "s" : ""}`,   color: "#4ade80" },
+            adjusted > 0 && { label: `${adjusted} ajustado${adjusted !== 1 ? "s" : ""}`, color: "#f59e0b" },
+            absent   > 0 && { label: `${absent} falta${absent !== 1 ? "s" : ""}`,         color: "#f87171" },
+            pending  > 0 && { label: `${pending} por confirmar`,                           color: "var(--text-secondary)" },
+          ].filter(Boolean).map((c, i) => (
+            <span key={i} className="role-badge role-badge-static"
+              style={{ background: "rgba(255,255,255,0.06)", color: c.color, fontSize: "0.78rem" }}>
+              {c.label}
             </span>
           ))}
         </div>
@@ -419,24 +187,40 @@ function AttendanceDetailModal({ staffId, staffName, month, onClose }) {
         {loading && <p className="text-secondary">A carregar...</p>}
         {!loading && rows.length === 0 && <p className="text-secondary">Sem registos de presença para este mês.</p>}
         {!loading && rows.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {rows.map((r, i) => (
-              <div key={i} style={{ display: "flex", gap: 10, fontSize: "0.82rem", padding: "5px 8px",
-                borderRadius: 6, background: r.status === "absent" ? "rgba(248,113,113,0.06)" : r.status === "adjusted" ? "rgba(245,158,11,0.06)" : "transparent" }}>
-                <span style={{ minWidth: 56, color: "var(--text-secondary)", fontSize: "0.78rem" }}>
+              <div key={i}
+                style={{
+                  display: "flex", gap: 10, fontSize: "0.82rem", padding: "7px 10px",
+                  borderRadius: 6, cursor: "pointer", alignItems: "center",
+                  background: r.status === "absent" ? "rgba(248,113,113,0.07)" :
+                               r.status === "adjusted" ? "rgba(245,158,11,0.07)" : "rgba(255,255,255,0.02)",
+                  transition: "background 0.15s",
+                }}
+                onClick={() => { navigate(`/staff-attendance?date=${r.shift_date}`); onClose(); }}
+                title="Clicar para ver/editar presenças deste dia">
+                <span style={{ minWidth: 54, color: "var(--text-secondary)", fontSize: "0.78rem", flexShrink: 0 }}>
                   {DAY_NAMES[r.weekday]} {r.shift_date.slice(8)}
                 </span>
-                <span style={{ minWidth: 90 }}>{r.shift_start}–{r.shift_end}</span>
-                <span className="text-secondary" style={{ flex: 1 }}>{ACTIVITY_LABELS[r.activity] || r.activity}</span>
-                <span style={{ fontWeight: 600, color: statusColor(r.status), whiteSpace: "nowrap" }}>
+                <span style={{ minWidth: 94, flexShrink: 0 }}>{r.shift_start}–{r.shift_end}</span>
+                <span className="text-secondary" style={{ flex: 1, fontSize: "0.78rem" }}>
+                  {ACTIVITY_LABELS[r.activity] || r.activity}
+                </span>
+                <span style={{ fontWeight: 600, color: statusColor(r.status), whiteSpace: "nowrap", fontSize: "0.8rem" }}>
                   {statusLabel(r.status)}
                   {Number(r.deducted_hours) > 0 && ` −${Number(r.deducted_hours).toFixed(1)}h`}
                 </span>
+                <span style={{ color: "var(--text-secondary)", fontSize: "0.8rem", flexShrink: 0 }}>›</span>
               </div>
             ))}
           </div>
         )}
 
+        {rows.length > 0 && (
+          <p className="text-secondary" style={{ fontSize: "0.75rem", marginTop: 10 }}>
+            Clica num registo para abrir o horário desse dia e editar presenças.
+          </p>
+        )}
         <div className="form-actions" style={{ marginTop: 14 }}>
           <button className="glass-button" onClick={onClose}>Fechar</button>
         </div>
@@ -446,123 +230,105 @@ function AttendanceDetailModal({ staffId, staffName, month, onClose }) {
 }
 
 // ─── Modal confirmação de pagamento mensal ──────────────────────────────────
-function PayMonthModal({ staff, weekData, month, onClose, onSaved }) {
+function PayMonthModal({ staffList, month, onClose, onSaved }) {
+  const [ptClients, setPtClients] = useState(() => {
+    const init = {};
+    staffList.forEach((s) => { init[s.id] = String(s.month_pt_clients || 0); });
+    return init;
+  });
   const [saving, setSaving] = useState(false);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
-  const [expandedIds, setExpandedIds] = useState(new Set());
 
-  function toggleExpand(id) {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
+  // Only include staff that have any attendance or a base salary
+  const totals = staffList
+    .filter((s) =>
+      Number(s.month_hours_sala) > 0 ||
+      Number(s.month_hours_reception) > 0 ||
+      Number(s.month_hours_class) > 0 ||
+      Number(ptClients[s.id]) > 0 ||
+      Number(s.base_salary) > 0
+    )
+    .map((s) => {
+      const clients = Number(ptClients[s.id] || 0);
+      const { gross, cut, net } = calcEarnings(s, clients);
+      return { s, gross, cut, net, clients };
     });
-  }
-
-  // Agrupa semanas por staff_id e calcula totais do mês
-  const totals = staff.map((s) => {
-    const sw = weekData.filter((w) => String(w.staff_id) === String(s.id));
-    if (!sw.length) return null;
-    const hSala = sw.reduce((a, w) => a + Number(w.hours_sala || 0), 0);
-    const hRec  = sw.reduce((a, w) => a + Number(w.hours_reception || 0), 0);
-    const hCls  = sw.reduce((a, w) => a + Number(w.hours_class || 0), 0);
-    const clients = Math.max(...sw.map((w) => Number(w.pt_clients_count || 0)));
-    const abH   = sw.reduce((a, w) => a + Number(w.absent_hours || 0), 0);
-    const abD   = sw.reduce((a, w) => a + Number(w.absent_deduction || 0), 0);
-    const { gross, cut, net } = calcEarnings({
-      ...s,
-      hours_reception: hRec, hours_sala: hSala, hours_class: hCls, pt_clients_count: clients,
-      month_hours_reception: hRec, month_hours_sala: hSala, month_hours_class: hCls, month_pt_clients: clients,
-    });
-    return { s, hSala, hRec, hCls, clients, abH, abD, gross, cut, net };
-  }).filter(Boolean);
 
   async function handlePay() {
-    setSaving(true);
-    setError("");
+    setSaving(true); setError("");
     try {
       for (const t of totals) {
         await apiRequest("/finance/payments", {
           method: "POST",
           body: {
             staff_id: t.s.id, month,
-            hours_sala: t.hSala, hours_reception: t.hRec, hours_class: t.hCls,
-            pt_clients_count: t.clients, absent_hours: t.abH,
-            gross: t.gross, gym_cut: t.cut, absent_deduction: t.abD, net: t.net,
+            hours_sala:       Number(t.s.month_hours_sala),
+            hours_reception:  Number(t.s.month_hours_reception),
+            hours_class:      Number(t.s.month_hours_class),
+            pt_clients_count: t.clients,
+            absent_hours: 0,
+            gross: t.gross, gym_cut: t.cut, absent_deduction: 0, net: t.net,
             notes: notes || null,
           },
         });
       }
-      onSaved();
-      onClose();
-    } catch (err) {
-      setError(err.message);
-      setSaving(false);
-    }
+      onSaved(); onClose();
+    } catch (err) { setError(err.message); setSaving(false); }
   }
 
   const totalNet = totals.reduce((a, t) => a + t.net, 0);
 
   return (
     <Modal onClose={onClose}>
-      <GlassCard className="preview-card" strong style={{ maxWidth: 460, width: "100%" }}>
+      <GlassCard className="preview-card" strong style={{ maxWidth: 480, width: "100%", maxHeight: "80vh", overflowY: "auto" }}>
         <h3>Confirmar pagamento — <span style={{ textTransform: "capitalize" }}>{monthLabelFull(month)}</span></h3>
-        <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 2 }}>
-          {totals.map((t) => {
-            const staffWeeks = weekData.filter((w) => String(w.staff_id) === String(t.s.id));
-            const isExpanded = expandedIds.has(t.s.id);
-            return (
-              <div key={t.s.id} style={{ borderBottom: "1px solid var(--glass-border)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", padding: "8px 0", cursor: staffWeeks.length > 0 ? "pointer" : "default" }}
-                  onClick={() => staffWeeks.length > 0 && toggleExpand(t.s.id)}>
-                  <div>
-                    <strong style={{ borderBottom: staffWeeks.length > 0 ? "1px dotted var(--text-secondary)" : "none" }}>
-                      {t.s.name} {staffWeeks.length > 0 && <span style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>{isExpanded ? "▲" : "▼"}</span>}
-                    </strong>
-                    <span className="text-secondary" style={{ marginLeft: 6, fontSize: "0.78rem" }}>{ROLE_LABELS[t.s.role] || t.s.role}</span>
-                    {t.abD > 0 && <div style={{ fontSize: "0.75rem", color: "#f87171" }}>Desconto faltas: – {fmtEuro(t.abD)}</div>}
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div className="text-secondary" style={{ fontSize: "0.78rem" }}>Bruto: {fmtEuro(t.gross)}</div>
-                    <strong>{fmtEuro(t.net)}</strong>
+        <p className="text-secondary" style={{ fontSize: "0.82rem", marginTop: 4, marginBottom: 14 }}>
+          Horas calculadas automaticamente a partir dos registos de presença.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          {totals.map((t) => (
+            <div key={t.s.id} style={{ borderBottom: "1px solid var(--glass-border)", padding: "10px 0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <strong style={{ fontSize: "0.92rem" }}>{t.s.name}</strong>
+                  <span className="text-secondary" style={{ marginLeft: 6, fontSize: "0.78rem" }}>{ROLE_LABELS[t.s.role] || t.s.role}</span>
+                  <div className="text-secondary" style={{ fontSize: "0.76rem", marginTop: 4, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    {Number(t.s.month_hours_sala) > 0       && <span>Sala {t.s.month_hours_sala}h</span>}
+                    {Number(t.s.month_hours_reception) > 0  && <span>Rec. {t.s.month_hours_reception}h</span>}
+                    {Number(t.s.month_hours_class) > 0      && <span>Aulas {t.s.month_hours_class}h</span>}
+                    {Number(t.s.rate_pt_month) > 0 && (
+                      <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        PT
+                        <input type="number" min="0" className="glass-input"
+                          style={{ width: 48, height: 22, padding: "2px 4px", fontSize: "0.76rem", display: "inline" }}
+                          value={ptClients[t.s.id]}
+                          onChange={(e) => setPtClients((p) => ({ ...p, [t.s.id]: e.target.value }))} />
+                        clientes
+                      </span>
+                    )}
                   </div>
                 </div>
-                {isExpanded && staffWeeks.length > 0 && (
-                  <div style={{ paddingBottom: 8, paddingLeft: 8, display: "flex", flexDirection: "column", gap: 4 }}>
-                    {staffWeeks.map((w, wi) => {
-                      const we = calcWeekEarnings(w);
-                      return (
-                        <div key={wi} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", padding: "3px 0" }}>
-                          <div>
-                            <span className="text-secondary">{weekLabel(w.week_start)}</span>
-                            <div className="text-secondary" style={{ fontSize: "0.72rem" }}>
-                              {Number(w.hours_sala) > 0 && `Sala ${w.hours_sala}h  `}
-                              {Number(w.hours_reception) > 0 && `Rec. ${w.hours_reception}h  `}
-                              {Number(w.hours_class) > 0 && `Aulas ${w.hours_class}h  `}
-                              {Number(w.pt_clients_count) > 0 && `${w.pt_clients_count} clientes PT`}
-                            </div>
-                          </div>
-                          <div style={{ textAlign: "right" }}>
-                            {we.absent_deduction > 0 && <div style={{ color: "#f87171", fontSize: "0.72rem" }}>– {fmtEuro(we.absent_deduction)}</div>}
-                            <span>{fmtEuro(we.net)}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div className="text-secondary" style={{ fontSize: "0.76rem" }}>Bruto: {fmtEuro(t.gross)}</div>
+                  {t.cut > 0 && <div style={{ color: "#4ade80", fontSize: "0.76rem" }}>–{fmtEuro(t.cut)}</div>}
+                  <strong style={{ fontSize: "0.95rem" }}>{fmtEuro(t.net)}</strong>
+                </div>
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, fontWeight: 700, fontSize: "1rem" }}>
+        {totals.length === 0 && (
+          <p className="text-secondary">Nenhum membro com registos neste mês.</p>
+        )}
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14, fontWeight: 700, fontSize: "1rem" }}>
           <span>Total a pagar</span>
           <span>{fmtEuro(totalNet)}</span>
         </div>
         <div className="form-row" style={{ marginTop: 12 }}>
           <label className="field-label">Notas (opcional)</label>
-          <input className="glass-input" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ex: Transferência bancária em 05/10" />
+          <input className="glass-input" value={notes} onChange={(e) => setNotes(e.target.value)}
+            placeholder="Ex: Transferência bancária em 05/10" />
         </div>
         {error && <p className="error-text">{error}</p>}
         <div className="form-actions" style={{ marginTop: 14 }}>
@@ -578,325 +344,252 @@ function PayMonthModal({ staff, weekData, month, onClose, onSaved }) {
 
 // ─── Página principal ───────────────────────────────────────────────────────
 export default function FinancePage() {
+  const navigate = useNavigate();
   const [staffList, setStaffList] = useState([]);
-  const [weeks, setWeeks] = useState([]);
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editingRates, setEditingRates] = useState(null);
-  const [addingWeek, setAddingWeek] = useState(false);
-  const [editingWeek, setEditingWeek] = useState(null);
   const [payingMonth, setPayingMonth] = useState(false);
-  const [viewingAttendance, setViewingAttendance] = useState(null); // { id, name }
+  const [viewingStaff, setViewingStaff] = useState(null); // { id, name }
   const [tab, setTab] = useState("staff");
-  const [expandedWeekIds, setExpandedWeekIds] = useState(new Set());
-
-  function toggleWeekExpand(id) {
-    setExpandedWeekIds((prev) => {
-      const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next;
-    });
-  }
-  const [weekMonth, setWeekMonth] = useState(prevMonthYM(currentYM()));
+  const [staffMonth, setStaffMonth] = useState(prevMonthYM(currentYM()));
   const [payMonth, setPayMonth] = useState(prevMonthYM(currentYM()));
-  function loadWeeks(month) {
-    apiRequest(`/finance/weeks?month=${month}`).then(setWeeks).catch(() => {});
-  }
-  function loadPayments(month) {
-    apiRequest(`/finance/payments?month=${month}`).then(setPayments).catch(() => {});
-  }
 
-  function load() {
+  function load(month) {
     setLoading(true);
-    Promise.all([apiRequest("/finance/staff"), apiRequest(`/finance/weeks?month=${weekMonth}`)])
-      .then(([s, w]) => { setStaffList(s); setWeeks(w); })
+    apiRequest(`/finance/staff?month=${month}`)
+      .then(setStaffList)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { loadWeeks(weekMonth); }, [weekMonth]);
-  useEffect(() => { loadPayments(payMonth); }, [payMonth]);
-
-  async function deletePayment(id) {
-    if (!window.confirm("Anular este pagamento?")) return;
-    try {
-      await apiRequest(`/finance/payments/${id}`, { method: "DELETE" });
-      loadPayments(payMonth);
-    } catch (err) {
-      setError(err.message);
-    }
+  function loadPayments(month) {
+    apiRequest(`/finance/payments?month=${month}`).then(setPayments).catch(() => {});
   }
 
+  useEffect(() => { load(staffMonth); }, [staffMonth]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadPayments(payMonth); }, [payMonth]);
+
+  const grossMonth   = staffList.reduce((s, st) => s + calcEarnings(st).gross, 0);
+  const gymCutMonth  = staffList.reduce((s, st) => s + calcEarnings(st).cut,   0);
+  const hasAttendance = staffList.some((s) => Number(s.shifts_present) + Number(s.shifts_adjusted) + Number(s.shifts_absent) > 0);
+
   function exportPDF() {
-    const month = weekMonth;
     const win = window.open("", "_blank", "width=800,height=700");
     if (!win) return;
     const rows = staffList.map((s) => {
-      const sw = weeks.filter((w) => String(w.staff_id) === String(s.id));
-      if (!sw.length) return "";
-      const hSala = sw.reduce((a, w) => a + Number(w.hours_sala || 0), 0);
-      const hRec  = sw.reduce((a, w) => a + Number(w.hours_reception || 0), 0);
-      const hCls  = sw.reduce((a, w) => a + Number(w.hours_class || 0), 0);
-      const clients = Math.max(...sw.map((w) => Number(w.pt_clients_count || 0)));
-      const abD = sw.reduce((a, w) => a + Number(w.absent_deduction || 0), 0);
-      const { gross, cut, net } = calcEarnings({
-        ...s,
-        hours_reception: hRec, hours_sala: hSala, hours_class: hCls, pt_clients_count: clients,
-        month_hours_reception: hRec, month_hours_sala: hSala, month_hours_class: hCls, month_pt_clients: clients,
-      });
+      const { gross, cut, net } = calcEarnings(s);
       return `<tr>
         <td>${s.name}<br><small>${ROLE_LABELS[s.role] || s.role}</small></td>
-        <td>${hSala}h</td><td>${hRec}h</td><td>${hCls}h</td>
-        <td>${clients}</td>
+        <td>${s.month_hours_sala || 0}h</td>
+        <td>${s.month_hours_reception || 0}h</td>
+        <td>${s.month_hours_class || 0}h</td>
         <td>${fmtEuro(gross)}</td>
         <td style="color:#16a34a">${fmtEuro(cut)}</td>
-        <td style="color:#dc2626">${abD > 0 ? fmtEuro(abD) : "–"}</td>
         <td><strong>${fmtEuro(net)}</strong></td>
       </tr>`;
-    }).filter(Boolean).join("");
+    }).join("");
     win.document.write(`<!doctype html><html><head><meta charset="utf-8">
-    <title>Relatório Financeiro – ${monthLabelFull(month)}</title>
-    <style>
-      body { font-family: Arial, sans-serif; padding: 24px; color: #111; }
-      h1 { font-size: 1.3rem; margin-bottom: 4px; }
-      p.sub { color: #666; margin: 0 0 20px; font-size: 0.85rem; }
-      table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-      th { background: #f3f4f6; text-align: left; padding: 8px 10px; border-bottom: 2px solid #ddd; }
-      td { padding: 7px 10px; border-bottom: 1px solid #eee; vertical-align: top; }
-      small { color: #666; }
-      @media print { button { display: none; } }
-    </style></head><body>
+    <title>Relatório – ${monthLabelFull(staffMonth)}</title>
+    <style>body{font-family:Arial,sans-serif;padding:24px;color:#111}
+    h1{font-size:1.3rem;margin-bottom:4px}p.sub{color:#666;margin:0 0 20px;font-size:.85rem}
+    table{width:100%;border-collapse:collapse;font-size:.88rem}
+    th{background:#f3f4f6;text-align:left;padding:8px 10px;border-bottom:2px solid #ddd}
+    td{padding:7px 10px;border-bottom:1px solid #eee;vertical-align:top}
+    small{color:#666}@media print{button{display:none}}</style>
+    </head><body>
     <h1>Relatório Financeiro</h1>
-    <p class="sub" style="text-transform:capitalize">${monthLabelFull(month)}</p>
-    <table>
-      <thead><tr>
-        <th>Nome</th><th>Sala (h)</th><th>Rec. (h)</th><th>Aulas (h)</th>
-        <th>Clientes PT</th><th>Bruto</th><th>Retenção</th><th>Faltas</th><th>A pagar</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
+    <p class="sub" style="text-transform:capitalize">${monthLabelFull(staffMonth)}</p>
+    <table><thead><tr>
+      <th>Nome</th><th>Sala (h)</th><th>Rec. (h)</th><th>Aulas (h)</th>
+      <th>Bruto</th><th>Retenção</th><th>A pagar</th>
+    </tr></thead><tbody>${rows}</tbody></table>
     <br><button onclick="window.print()">Imprimir / Guardar PDF</button>
     </body></html>`);
-    win.document.close();
-    win.focus();
+    win.document.close(); win.focus();
   }
 
-  const gymCutMonth = staffList.reduce((sum, s) => {
-    const { cut } = calcEarnings({ ...s, hours_reception: s.month_hours_reception, hours_sala: s.month_hours_sala, hours_class: s.month_hours_class, pt_clients_count: s.month_pt_clients });
-    return sum + cut;
-  }, 0);
-
-  const grossMonth = staffList.reduce((sum, s) => {
-    const { gross } = calcEarnings({ ...s, hours_reception: s.month_hours_reception, hours_sala: s.month_hours_sala, hours_class: s.month_hours_class, pt_clients_count: s.month_pt_clients });
-    return sum + gross;
-  }, 0);
+  // Shared month nav UI
+  const MonthNav = ({ month, setMonth, max }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+      <button className="glass-button glass-button-secondary" style={{ padding: "4px 10px" }}
+        onClick={() => setMonth(prevMonthYM(month))}>‹</button>
+      <span style={{ minWidth: 140, textAlign: "center", fontSize: "0.92rem", textTransform: "capitalize" }}>
+        {monthLabelFull(month)}
+      </span>
+      <button className="glass-button glass-button-secondary" style={{ padding: "4px 10px" }}
+        disabled={max && month >= max} onClick={() => setMonth(nextMonthYM(month))}>›</button>
+    </div>
+  );
 
   return (
     <div className="page-container">
       <div className="page-header">
         <h1>Gestão Financeira</h1>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="glass-button glass-button-secondary" onClick={exportPDF}>⬇ Transferir relatório</button>
-          <button className="glass-button" onClick={() => setAddingWeek(true)}>+ Registar semana</button>
-        </div>
+        <button className="glass-button glass-button-secondary" onClick={exportPDF}>⬇ Relatório</button>
       </div>
 
       {error && <p className="error-text">{error}</p>}
 
       <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
         <button className={`glass-button${tab === "staff" ? "" : " glass-button-secondary"}`} onClick={() => setTab("staff")}>Equipa</button>
-        <button className={`glass-button${tab === "weeks" ? "" : " glass-button-secondary"}`} onClick={() => setTab("weeks")}>Registos</button>
+        <button className={`glass-button${tab === "records" ? "" : " glass-button-secondary"}`} onClick={() => setTab("records")}>Registos</button>
         <button className={`glass-button${tab === "payments" ? "" : " glass-button-secondary"}`} onClick={() => setTab("payments")}>Pagamentos</button>
       </div>
 
-      {loading && <p className="text-secondary">A carregar...</p>}
-
-      {!loading && tab === "staff" && (
+      {/* ── Equipa ── */}
+      {tab === "staff" && (
         <>
-          <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-            <GlassCard style={{ flex: 1, minWidth: 180, padding: "12px 18px" }}>
-              <div className="text-secondary" style={{ fontSize: "0.82rem" }}>Total bruto este mês</div>
-              <strong style={{ fontSize: "1.15rem" }}>{fmtEuro(grossMonth)}</strong>
-            </GlassCard>
-            <GlassCard style={{ flex: 1, minWidth: 180, padding: "12px 18px" }}>
-              <div className="text-secondary" style={{ fontSize: "0.82rem" }}>Retenção ginásio</div>
-              <strong style={{ fontSize: "1.15rem", color: "#4ade80" }}>{fmtEuro(gymCutMonth)}</strong>
-            </GlassCard>
-            <GlassCard style={{ flex: 1, minWidth: 180, padding: "12px 18px" }}>
-              <div className="text-secondary" style={{ fontSize: "0.82rem" }}>Custo líquido</div>
-              <strong style={{ fontSize: "1.15rem" }}>{fmtEuro(grossMonth - gymCutMonth)}</strong>
-            </GlassCard>
-          </div>
+          <MonthNav month={staffMonth} setMonth={setStaffMonth} max={currentYM()} />
 
-          <div className="member-grid">
-            {staffList.map((s) => {
-              const { gross, cut, net } = calcEarnings({ ...s, hours_reception: s.month_hours_reception, hours_sala: s.month_hours_sala, hours_class: s.month_hours_class, pt_clients_count: s.month_pt_clients });
-              const url = resolveAssetUrl(s.avatar_url);
-              const hasCut = s.gym_cut_pct != null || s.gym_cut_fixed != null;
-              return (
-                <GlassCard key={s.id} className="member-tile" strong>
-                  <div className="member-tile-header">
-                    {url
-                      ? <img src={url} alt="" className="member-card-avatar" />
-                      : <span className="member-card-avatar member-card-avatar-fallback">{s.name.charAt(0).toUpperCase()}</span>}
-                    <div className="member-tile-identity">
-                      <span className="member-tile-name">{s.name}</span>
-                      <span className="text-secondary" style={{ fontSize: "0.8rem" }}>{ROLE_LABELS[s.role] || s.role}</span>
-                    </div>
-                  </div>
+          {loading && <p className="text-secondary">A carregar...</p>}
 
-                  <div style={{ marginTop: 12, fontSize: "0.83rem", display: "flex", flexDirection: "column", gap: 3 }}>
-                    {[
-                      ["Salário base", fmtEuro(s.base_salary) + "/mês"],
-                      ["Receção", fmtEuro(s.rate_reception_h) + "/h · " + (s.month_hours_reception || 0) + "h"],
-                      ["Sala", fmtEuro(s.rate_sala_h) + "/h · " + (s.month_hours_sala || 0) + "h"],
-                      ["Aulas de grupo", fmtEuro(s.rate_class_h) + "/h · " + (s.month_hours_class || 0) + "h"],
-                      ["PT clientes", fmtEuro(s.rate_pt_month) + "/mês · " + (s.month_pt_clients || 0) + " clientes"],
-                    ].map(([label, val]) => (
-                      <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                        <span className="text-secondary">{label}</span>
-                        <span>{val}</span>
+          {!loading && (
+            <>
+              <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+                <GlassCard style={{ flex: 1, minWidth: 160, padding: "12px 18px" }}>
+                  <div className="text-secondary" style={{ fontSize: "0.82rem" }}>Total bruto</div>
+                  <strong style={{ fontSize: "1.15rem" }}>{fmtEuro(grossMonth)}</strong>
+                </GlassCard>
+                <GlassCard style={{ flex: 1, minWidth: 160, padding: "12px 18px" }}>
+                  <div className="text-secondary" style={{ fontSize: "0.82rem" }}>Retenção ginásio</div>
+                  <strong style={{ fontSize: "1.15rem", color: "#4ade80" }}>{fmtEuro(gymCutMonth)}</strong>
+                </GlassCard>
+                <GlassCard style={{ flex: 1, minWidth: 160, padding: "12px 18px" }}>
+                  <div className="text-secondary" style={{ fontSize: "0.82rem" }}>Custo líquido</div>
+                  <strong style={{ fontSize: "1.15rem" }}>{fmtEuro(grossMonth - gymCutMonth)}</strong>
+                </GlassCard>
+              </div>
+
+              {hasAttendance && (
+                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+                  <button className="glass-button" style={{ fontSize: "0.85rem" }} onClick={() => setPayingMonth(true)}>
+                    Confirmar pagamento do mês
+                  </button>
+                </div>
+              )}
+
+              <div className="member-grid">
+                {staffList.map((s) => {
+                  const { gross, cut, net } = calcEarnings(s);
+                  const url = resolveAssetUrl(s.avatar_url);
+                  const hasCut = s.gym_cut_pct != null || s.gym_cut_fixed != null;
+                  const totalShifts = Number(s.shifts_present) + Number(s.shifts_adjusted) + Number(s.shifts_absent) + Number(s.shifts_pending);
+                  return (
+                    <GlassCard key={s.id} className="member-tile" strong>
+                      <div className="member-tile-header">
+                        {url
+                          ? <img src={url} alt="" className="member-card-avatar" />
+                          : <span className="member-card-avatar member-card-avatar-fallback">{s.name.charAt(0).toUpperCase()}</span>}
+                        <div className="member-tile-identity">
+                          <span className="member-tile-name">{s.name}</span>
+                          <span className="text-secondary" style={{ fontSize: "0.8rem" }}>{ROLE_LABELS[s.role] || s.role}</span>
+                        </div>
                       </div>
-                    ))}
 
-                    <div style={{ borderTop: "1px solid var(--glass-border)", paddingTop: 4, marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span className="text-secondary">Total bruto</span>
-                        <span>{fmtEuro(gross)}</span>
-                      </div>
-                      {hasCut && (
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span className="text-secondary">
-                            Retenção ginásio {s.gym_cut_pct != null ? `(${s.gym_cut_pct}%)` : `(fixo)`}
-                          </span>
-                          <span style={{ color: "#4ade80" }}>– {fmtEuro(cut)}</span>
+                      {/* Attendance summary chips */}
+                      {totalShifts > 0 && (
+                        <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                          {Number(s.shifts_present) > 0  && <span className="role-badge role-badge-static" style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80", fontSize: "0.72rem" }}>✓ {s.shifts_present}</span>}
+                          {Number(s.shifts_adjusted) > 0 && <span className="role-badge role-badge-static" style={{ background: "rgba(245,158,11,0.12)", color: "#f59e0b", fontSize: "0.72rem" }}>~ {s.shifts_adjusted}</span>}
+                          {Number(s.shifts_absent) > 0   && <span className="role-badge role-badge-static" style={{ background: "rgba(248,113,113,0.12)", color: "#f87171", fontSize: "0.72rem" }}>✗ {s.shifts_absent}</span>}
+                          {Number(s.shifts_pending) > 0  && <span className="role-badge role-badge-static" style={{ background: "rgba(255,255,255,0.06)", color: "var(--text-secondary)", fontSize: "0.72rem" }}>? {s.shifts_pending}</span>}
                         </div>
                       )}
-                      <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 600 }}>
-                        <span>A pagar</span>
-                        <span>{fmtEuro(net)}</span>
-                      </div>
-                    </div>
-                  </div>
 
-                  <button type="button" className="glass-button glass-button-secondary"
-                    style={{ marginTop: 12, width: "100%", fontSize: "0.82rem" }}
-                    onClick={() => setEditingRates(s)}>
-                    Editar taxas
-                  </button>
-                </GlassCard>
-              );
-            })}
-          </div>
+                      <div style={{ marginTop: 12, fontSize: "0.83rem", display: "flex", flexDirection: "column", gap: 3 }}>
+                        {[
+                          ["Salário base", fmtEuro(s.base_salary) + "/mês"],
+                          Number(s.rate_reception_h) > 0 && ["Receção", fmtEuro(s.rate_reception_h) + "/h · " + (s.month_hours_reception || 0) + "h"],
+                          Number(s.rate_sala_h) > 0      && ["Sala",    fmtEuro(s.rate_sala_h)      + "/h · " + (s.month_hours_sala      || 0) + "h"],
+                          Number(s.rate_class_h) > 0     && ["Aulas",   fmtEuro(s.rate_class_h)     + "/h · " + (s.month_hours_class     || 0) + "h"],
+                        ].filter(Boolean).map(([label, val]) => (
+                          <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                            <span className="text-secondary">{label}</span>
+                            <span>{val}</span>
+                          </div>
+                        ))}
+
+                        <div style={{ borderTop: "1px solid var(--glass-border)", paddingTop: 4, marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span className="text-secondary">Total bruto</span>
+                            <span>{fmtEuro(gross)}</span>
+                          </div>
+                          {hasCut && (
+                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                              <span className="text-secondary">Retenção {s.gym_cut_pct != null ? `(${s.gym_cut_pct}%)` : "(fixo)"}</span>
+                              <span style={{ color: "#4ade80" }}>– {fmtEuro(cut)}</span>
+                            </div>
+                          )}
+                          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 600, fontSize: "1rem", marginTop: 2 }}>
+                            <span>A pagar</span>
+                            <span>{fmtEuro(net)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button type="button" className="glass-button glass-button-secondary"
+                        style={{ marginTop: 12, width: "100%", fontSize: "0.82rem" }}
+                        onClick={() => setEditingRates(s)}>
+                        Editar taxas
+                      </button>
+                    </GlassCard>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </>
       )}
 
-      {!loading && tab === "weeks" && (
+      {/* ── Registos de presença ── */}
+      {tab === "records" && (
         <>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-            <button className="glass-button glass-button-secondary" style={{ padding: "4px 10px" }} onClick={() => setWeekMonth(prevMonthYM(weekMonth))}>‹</button>
-            <span style={{ minWidth: 130, textAlign: "center", fontSize: "0.92rem", textTransform: "capitalize" }}>{monthLabelFull(weekMonth)}</span>
-            <button className="glass-button glass-button-secondary" style={{ padding: "4px 10px" }} disabled={weekMonth >= currentYM()} onClick={() => setWeekMonth(nextMonthYM(weekMonth))}>›</button>
-            {weeks.length > 0 && (
-              <button className="glass-button" style={{ marginLeft: "auto", fontSize: "0.82rem" }} onClick={() => setPayingMonth(true)}>
-                Confirmar pagamento do mês
-              </button>
-            )}
-          </div>
-          {weeks.length === 0 && <p className="text-secondary">Ainda não há registos para este mês. Usa "+ Registar semana" para adicionar.</p>}
+          <MonthNav month={staffMonth} setMonth={setStaffMonth} max={currentYM()} />
 
-          {/* Monthly aggregates — one card per staff member */}
-          {(() => {
-            const staffIds = [...new Set(weeks.map((w) => w.staff_id))];
-            return staffIds.map((staffId) => {
-              const sw = weeks.filter((w) => w.staff_id === staffId);
-              const first = sw[0];
-              const hSala = sw.reduce((a, w) => a + Number(w.hours_sala || 0), 0);
-              const hRec  = sw.reduce((a, w) => a + Number(w.hours_reception || 0), 0);
-              const hCls  = sw.reduce((a, w) => a + Number(w.hours_class || 0), 0);
-              const clients = Math.max(...sw.map((w) => Number(w.pt_clients_count || 0)));
-              const abH = sw.reduce((a, w) => a + Number(w.absent_hours || 0), 0);
-              const abD = sw.reduce((a, w) => a + Number(w.absent_deduction || 0), 0);
-              const staffData = staffList.find((s) => String(s.id) === String(staffId)) || first;
-              const { gross, cut, net } = calcEarnings({
-                ...staffData,
-                hours_reception: hRec, hours_sala: hSala, hours_class: hCls, pt_clients_count: clients,
-                month_hours_reception: hRec, month_hours_sala: hSala, month_hours_class: hCls, month_pt_clients: clients,
-              });
-              const isExpanded = expandedWeekIds.has(staffId);
-              return (
-                <GlassCard key={staffId} style={{ padding: "14px 18px", marginBottom: 10 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
-                    <div style={{ flex: 1 }}>
-                      {/* Clickable name → attendance modal */}
-                      <button type="button" style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
-                        onClick={() => setViewingAttendance({ id: staffId, name: first.staff_name })}>
-                        <strong style={{ fontSize: "1rem", borderBottom: "1px dotted rgba(255,255,255,0.4)" }}>{first.staff_name}</strong>
-                      </button>
-                      <span className="text-secondary" style={{ marginLeft: 8, fontSize: "0.8rem" }}>{ROLE_LABELS[first.staff_role] || first.staff_role}</span>
-                      <div style={{ fontSize: "0.82rem", marginTop: 6, color: "var(--text-secondary)", display: "flex", gap: 12, flexWrap: "wrap" }}>
-                        {hSala > 0 && <span>Sala <strong style={{ color: "var(--text-primary)" }}>{hSala}h</strong></span>}
-                        {hRec > 0  && <span>Rec. <strong style={{ color: "var(--text-primary)" }}>{hRec}h</strong></span>}
-                        {hCls > 0  && <span>Aulas <strong style={{ color: "var(--text-primary)" }}>{hCls}h</strong></span>}
-                        {clients > 0 && <span>{clients} clientes PT</span>}
-                        {abH > 0 && <span style={{ color: "#f87171" }}>−{abH}h falta{abH !== 1 ? "s" : ""}</span>}
+          {loading && <p className="text-secondary">A carregar...</p>}
+
+          {!loading && staffList.length === 0 && (
+            <p className="text-secondary">Sem membros de equipa configurados.</p>
+          )}
+
+          {!loading && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {staffList.map((s) => {
+                const totalShifts = Number(s.shifts_present) + Number(s.shifts_adjusted) + Number(s.shifts_absent) + Number(s.shifts_pending);
+                return (
+                  <GlassCard key={s.id} style={{ padding: "14px 18px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                      <div style={{ flex: 1 }}>
+                        <strong style={{ fontSize: "0.95rem" }}>{s.name}</strong>
+                        <span className="text-secondary" style={{ marginLeft: 8, fontSize: "0.8rem" }}>{ROLE_LABELS[s.role] || s.role}</span>
+                        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                          {Number(s.shifts_present) > 0  && <span className="role-badge role-badge-static" style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80", fontSize: "0.75rem" }}>✓ {s.shifts_present} presente{s.shifts_present !== "1" ? "s" : ""}</span>}
+                          {Number(s.shifts_adjusted) > 0 && <span className="role-badge role-badge-static" style={{ background: "rgba(245,158,11,0.12)", color: "#f59e0b", fontSize: "0.75rem" }}>~ {s.shifts_adjusted} ajustado{s.shifts_adjusted !== "1" ? "s" : ""}</span>}
+                          {Number(s.shifts_absent) > 0   && <span className="role-badge role-badge-static" style={{ background: "rgba(248,113,113,0.12)", color: "#f87171", fontSize: "0.75rem" }}>✗ {s.shifts_absent} falta{s.shifts_absent !== "1" ? "s" : ""}</span>}
+                          {Number(s.shifts_pending) > 0  && <span className="role-badge role-badge-static" style={{ background: "rgba(255,255,255,0.06)", color: "var(--text-secondary)", fontSize: "0.75rem" }}>? {s.shifts_pending} por confirmar</span>}
+                          {totalShifts === 0 && <span className="text-secondary" style={{ fontSize: "0.8rem" }}>Sem registos</span>}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                        <button className="glass-button glass-button-secondary"
+                          style={{ fontSize: "0.82rem" }}
+                          onClick={() => setViewingStaff({ id: s.id, name: s.name })}>
+                          Ver registos
+                        </button>
+                        <button className="glass-button glass-button-secondary"
+                          style={{ fontSize: "0.82rem" }}
+                          onClick={() => navigate(`/staff-attendance`)}>
+                          Hoje
+                        </button>
                       </div>
                     </div>
-                    <div style={{ textAlign: "right", fontSize: "0.85rem", flexShrink: 0 }}>
-                      <div className="text-secondary">Bruto: {fmtEuro(gross)}</div>
-                      {cut > 0 && <div style={{ color: "#4ade80" }}>–{fmtEuro(cut)}</div>}
-                      {abD > 0 && <div style={{ color: "#f87171" }}>Faltas: –{fmtEuro(abD)}</div>}
-                      <strong style={{ fontSize: "1rem" }}>{fmtEuro(net)}</strong>
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    <button type="button" className="glass-button glass-button-secondary"
-                      style={{ fontSize: "0.78rem", padding: "3px 10px" }}
-                      onClick={() => toggleWeekExpand(staffId)}>
-                      {isExpanded ? "▲ Ocultar semanas" : "▼ Ver semanas"}
-                    </button>
-                    <button type="button" className="glass-button glass-button-secondary"
-                      style={{ fontSize: "0.78rem", padding: "3px 10px" }}
-                      onClick={() => setViewingAttendance({ id: staffId, name: first.staff_name })}>
-                      Ver presenças
-                    </button>
-                  </div>
-
-                  {/* Expandable weekly rows */}
-                  {isExpanded && (
-                    <div style={{ marginTop: 10, borderTop: "1px solid var(--glass-border)", paddingTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                      {sw.map((w) => {
-                        const we = calcWeekEarnings(w);
-                        return (
-                          <div key={w.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", padding: "4px 0", borderBottom: "1px solid var(--glass-border)" }}>
-                            <div>
-                              <span className="text-secondary">{weekLabel(w.week_start)}</span>
-                              <div className="text-secondary" style={{ fontSize: "0.76rem", marginTop: 2 }}>
-                                {Number(w.hours_sala) > 0 && `Sala ${w.hours_sala}h  `}
-                                {Number(w.hours_reception) > 0 && `Rec. ${w.hours_reception}h  `}
-                                {Number(w.hours_class) > 0 && `Aulas ${w.hours_class}h  `}
-                                {Number(w.pt_clients_count) > 0 && `${w.pt_clients_count} clientes PT`}
-                              </div>
-                            </div>
-                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                              <div style={{ textAlign: "right" }}>
-                                {we.absent_deduction > 0 && <div style={{ color: "#f87171", fontSize: "0.76rem" }}>–{fmtEuro(we.absent_deduction)}</div>}
-                                <span>{fmtEuro(we.net)}</span>
-                              </div>
-                              <button type="button" className="glass-button glass-button-secondary"
-                                style={{ fontSize: "0.76rem", padding: "2px 8px" }}
-                                onClick={() => setEditingWeek(w)}>Editar</button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </GlassCard>
-              );
-            });
-          })()}
+                  </GlassCard>
+                );
+              })}
+            </div>
+          )}
         </>
       )}
 
@@ -905,7 +598,7 @@ export default function FinancePage() {
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
             <button className="glass-button glass-button-secondary" style={{ padding: "4px 10px" }} onClick={() => setPayMonth(prevMonthYM(payMonth))}>‹</button>
-            <span style={{ minWidth: 130, textAlign: "center", fontSize: "0.92rem", textTransform: "capitalize" }}>{monthLabelFull(payMonth)}</span>
+            <span style={{ minWidth: 140, textAlign: "center", fontSize: "0.92rem", textTransform: "capitalize" }}>{monthLabelFull(payMonth)}</span>
             <button className="glass-button glass-button-secondary" style={{ padding: "4px 10px" }} disabled={payMonth >= currentYM()} onClick={() => setPayMonth(nextMonthYM(payMonth))}>›</button>
           </div>
           {payments.length === 0 && <p className="text-secondary">Sem pagamentos confirmados para este mês.</p>}
@@ -917,10 +610,10 @@ export default function FinancePage() {
                     <strong>{p.staff_name}</strong>
                     <span className="text-secondary" style={{ marginLeft: 8, fontSize: "0.8rem" }}>{ROLE_LABELS[p.staff_role] || p.staff_role}</span>
                     <div className="text-secondary" style={{ fontSize: "0.78rem", marginTop: 4 }}>
-                      {Number(p.hours_sala) > 0 && `Sala ${p.hours_sala}h  `}
-                      {Number(p.hours_reception) > 0 && `Rec. ${p.hours_reception}h  `}
-                      {Number(p.hours_class) > 0 && `Aulas ${p.hours_class}h  `}
-                      {p.pt_clients_count > 0 && `${p.pt_clients_count} clientes PT`}
+                      {Number(p.hours_sala) > 0       && `Sala ${p.hours_sala}h  `}
+                      {Number(p.hours_reception) > 0  && `Rec. ${p.hours_reception}h  `}
+                      {Number(p.hours_class) > 0      && `Aulas ${p.hours_class}h  `}
+                      {p.pt_clients_count > 0         && `${p.pt_clients_count} clientes PT`}
                     </div>
                     <div className="text-secondary" style={{ fontSize: "0.75rem", marginTop: 2 }}>
                       Pago em {fmtDate(p.paid_at)}{p.confirmed_by_name && ` por ${p.confirmed_by_name}`}
@@ -930,11 +623,14 @@ export default function FinancePage() {
                   <div style={{ textAlign: "right", fontSize: "0.85rem" }}>
                     <div className="text-secondary">Bruto: {fmtEuro(p.gross)}</div>
                     {Number(p.gym_cut) > 0 && <div style={{ color: "#4ade80" }}>Ginásio: – {fmtEuro(p.gym_cut)}</div>}
-                    {Number(p.absent_deduction) > 0 && <div style={{ color: "#f87171" }}>Faltas: – {fmtEuro(p.absent_deduction)}</div>}
                     <strong style={{ fontSize: "1rem" }}>{fmtEuro(p.net)}</strong>
                     <div>
                       <button className="nf-text-danger" style={{ fontSize: "0.75rem", marginTop: 6 }}
-                        onClick={() => deletePayment(p.id)}>Anular</button>
+                        onClick={async () => {
+                          if (!window.confirm("Anular este pagamento?")) return;
+                          try { await apiRequest(`/finance/payments/${p.id}`, { method: "DELETE" }); loadPayments(payMonth); }
+                          catch (err) { setError(err.message); }
+                        }}>Anular</button>
                     </div>
                   </div>
                 </div>
@@ -950,31 +646,27 @@ export default function FinancePage() {
       )}
 
       {editingRates && (
-        <RatesModal staff={editingRates} onClose={() => setEditingRates(null)} onSaved={load} />
+        <RatesModal staff={editingRates} onClose={() => setEditingRates(null)} onSaved={() => load(staffMonth)} />
       )}
-      {viewingAttendance && (
-        <AttendanceDetailModal
-          staffId={viewingAttendance.id}
-          staffName={viewingAttendance.name}
-          month={weekMonth}
-          onClose={() => setViewingAttendance(null)}
-        />
-      )}
-      {(addingWeek || editingWeek) && (
-        <AddWeekModal
-          staffList={staffList}
-          editingWeek={editingWeek}
-          onClose={() => { setAddingWeek(false); setEditingWeek(null); }}
-          onSaved={() => loadWeeks(weekMonth)}
+      {viewingStaff && (
+        <StaffMonthModal
+          staffId={viewingStaff.id}
+          staffName={viewingStaff.name}
+          month={staffMonth}
+          onClose={() => setViewingStaff(null)}
         />
       )}
       {payingMonth && (
         <PayMonthModal
-          staff={staffList}
-          weekData={weeks}
-          month={weekMonth}
+          staffList={staffList}
+          month={staffMonth}
           onClose={() => setPayingMonth(false)}
-          onSaved={() => { loadPayments(payMonth); setPayingMonth(false); setTab("payments"); setPayMonth(weekMonth); }}
+          onSaved={() => {
+            loadPayments(staffMonth);
+            setPayingMonth(false);
+            setTab("payments");
+            setPayMonth(staffMonth);
+          }}
         />
       )}
     </div>

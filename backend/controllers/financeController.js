@@ -1,34 +1,55 @@
 const pool = require("../db/pool");
 
-// GET /api/finance/staff — lista todo o staff com as suas taxas e totais do mês atual.
+// GET /api/finance/staff?month=YYYY-MM — lista staff com horas calculadas de staff_attendance.
 async function listStaffFinance(req, res) {
+  const month = req.query.month || (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  })();
+
   const result = await pool.query(
-    `SELECT u.id, u.name, u.role::text, u.avatar_url,
+    `WITH att AS (
+       SELECT sa.staff_id,
+              SUM(CASE WHEN sa.status IN ('present','adjusted') AND sa.activity NOT IN ('reception','class')
+                       THEN GREATEST(0, EXTRACT(EPOCH FROM (sa.shift_end - sa.shift_start))/3600.0 - COALESCE(sa.deducted_hours,0))
+                       ELSE 0 END) AS hours_sala,
+              SUM(CASE WHEN sa.status IN ('present','adjusted') AND sa.activity = 'reception'
+                       THEN GREATEST(0, EXTRACT(EPOCH FROM (sa.shift_end - sa.shift_start))/3600.0 - COALESCE(sa.deducted_hours,0))
+                       ELSE 0 END) AS hours_reception,
+              SUM(CASE WHEN sa.status IN ('present','adjusted') AND sa.activity = 'class'
+                       THEN GREATEST(0, EXTRACT(EPOCH FROM (sa.shift_end - sa.shift_start))/3600.0 - COALESCE(sa.deducted_hours,0))
+                       ELSE 0 END) AS hours_class,
+              COUNT(*) FILTER (WHERE sa.status = 'present')  AS shifts_present,
+              COUNT(*) FILTER (WHERE sa.status = 'adjusted') AS shifts_adjusted,
+              COUNT(*) FILTER (WHERE sa.status = 'absent')   AS shifts_absent,
+              COUNT(*) FILTER (WHERE sa.status = 'pending')  AS shifts_pending
+         FROM staff_attendance sa
+        WHERE sa.gym_id = $1
+          AND sa.shift_date >= ($2 || '-01')::date
+          AND sa.shift_date <  ($2 || '-01')::date + INTERVAL '1 month'
+        GROUP BY sa.staff_id
+     )
+     SELECT u.id, u.name, u.role::text AS role, u.avatar_url,
             COALESCE(sr.base_salary, 0)      AS base_salary,
             COALESCE(sr.rate_reception_h, 0) AS rate_reception_h,
             COALESCE(sr.rate_sala_h, 0)      AS rate_sala_h,
             COALESCE(sr.rate_class_h, 0)     AS rate_class_h,
             COALESCE(sr.rate_pt_month, 0)    AS rate_pt_month,
-            sr.gym_cut_pct,
-            sr.gym_cut_fixed,
-            COALESCE(m.hours_reception, 0) AS month_hours_reception,
-            COALESCE(m.hours_sala,      0) AS month_hours_sala,
-            COALESCE(m.hours_class,     0) AS month_hours_class,
-            COALESCE(m.pt_clients,      0) AS month_pt_clients
+            sr.gym_cut_pct, sr.gym_cut_fixed,
+            ROUND(COALESCE(att.hours_sala, 0)::numeric, 2)      AS month_hours_sala,
+            ROUND(COALESCE(att.hours_reception, 0)::numeric, 2) AS month_hours_reception,
+            ROUND(COALESCE(att.hours_class, 0)::numeric, 2)     AS month_hours_class,
+            0                                                    AS month_pt_clients,
+            COALESCE(att.shifts_present, 0)  AS shifts_present,
+            COALESCE(att.shifts_adjusted, 0) AS shifts_adjusted,
+            COALESCE(att.shifts_absent, 0)   AS shifts_absent,
+            COALESCE(att.shifts_pending, 0)  AS shifts_pending
        FROM users u
        LEFT JOIN staff_rates sr ON sr.staff_id = u.id AND sr.gym_id = $1
-       LEFT JOIN LATERAL (
-         SELECT SUM(pw.hours_reception)::numeric  AS hours_reception,
-                SUM(pw.hours_sala)::numeric        AS hours_sala,
-                SUM(pw.hours_class)::numeric       AS hours_class,
-                MAX(pw.pt_clients_count)           AS pt_clients
-           FROM payroll_weeks pw
-          WHERE pw.staff_id = u.id AND pw.gym_id = $1
-            AND pw.week_start >= date_trunc('month', CURRENT_DATE)
-       ) m ON true
+       LEFT JOIN att ON att.staff_id = u.id
       WHERE u.gym_id = $1 AND u.role::text IN ('personal_trainer','nutritionist','receptionist','intern')
       ORDER BY u.name`,
-    [req.user.gymId]
+    [req.user.gymId, month]
   );
   res.json(result.rows);
 }
