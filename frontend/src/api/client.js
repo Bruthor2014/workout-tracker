@@ -39,6 +39,16 @@ export async function apiRequest(path, { method = "GET", body, token } = {}) {
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
+    // Token expirado/inválido (ex: sessão de 7 dias passou) — não faz
+    // sentido deixar a app presa a mostrar este erro em vez de mandar a
+    // pessoa para o login outra vez.
+    if (response.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
+    }
     throw new Error(data?.message || "Erro ao comunicar com o servidor.");
   }
 
