@@ -283,7 +283,7 @@ CREATE TABLE class_cancellations (
     id          SERIAL PRIMARY KEY,
     class_id    INTEGER NOT NULL REFERENCES group_classes(id) ON DELETE CASCADE,
     class_date  DATE NOT NULL,
-    reason      VARCHAR(20) NOT NULL CHECK (reason IN ('not_enough', 'no_instructor')),
+    reason      VARCHAR(20) NOT NULL CHECK (reason IN ('not_enough', 'no_instructor', 'manual')),
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (class_id, class_date)
 );
@@ -304,6 +304,32 @@ CREATE TABLE staff_shifts (
     CHECK (end_time > start_time)
 );
 CREATE INDEX idx_staff_shifts_staff ON staff_shifts(staff_id, weekday, start_time);
+
+-- Presenças reais da equipa por turno/aula (confirmadas pela receção ou
+-- pelo fluxo de confirmação em duas partes das aulas — ver classController).
+-- NOTA: esta tabela existia na BD viva mas tinha ficado de fora do
+-- schema.sql e das migrations (encontrado ao reconciliar duas máquinas
+-- diferentes) — reconstruída aqui a partir do uso real em
+-- attendanceController.js/classController.js.
+CREATE TABLE staff_attendance (
+    id              SERIAL PRIMARY KEY,
+    gym_id          INTEGER NOT NULL REFERENCES gyms(id) ON DELETE CASCADE,
+    staff_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    shift_date      DATE NOT NULL,
+    shift_start     TIME NOT NULL,
+    shift_end       TIME NOT NULL,
+    activity        VARCHAR(20) NOT NULL DEFAULT 'floor' CHECK (activity IN ('floor', 'class', 'reception', 'assessments', 'admin', 'other')),
+    status          VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'present', 'absent', 'adjusted')),
+    deducted_hours  NUMERIC(8,2) NOT NULL DEFAULT 0,
+    adjustments     JSONB NOT NULL DEFAULT '[]'::jsonb,
+    confirmed_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    confirmed_at    TIMESTAMPTZ,
+    notes           TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (staff_id, shift_date, shift_start)
+);
+CREATE INDEX idx_attendance_gym_date ON staff_attendance(gym_id, shift_date);
+CREATE INDEX idx_attendance_staff_date ON staff_attendance(staff_id, shift_date);
 
 -- Sessões semanais de um PT (ou consultas de um nutricionista) com um
 -- cliente seu. Os turnos, as aulas e o gerador de horários não podem
