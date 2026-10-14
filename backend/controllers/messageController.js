@@ -2,40 +2,126 @@ const pool = require("../db/pool");
 
 const STAFF_ROLES = ["gym_owner", "personal_trainer", "nutritionist"];
 
-// GET /api/messages/contacts — com quem é que este utilizador pode falar:
-// um membro só vê staff do seu ginásio; staff vê toda a gente do ginásio
-// (membros e outro staff). Enriquecido com a última mensagem trocada e
-// quantas por ler, para servir de lista de conversas.
-async function listContacts(req, res) {
-  const isStaff = STAFF_ROLES.includes(req.user.role);
+const CONTACT_COLS = `u.id, u.name, u.email, u.role, u.avatar_url`;
 
-  const result = await pool.query(
+function contactsQuery(baseWhere, params) {
+  return pool.query(
     `SELECT u.id, u.name, u.email, u.role, u.avatar_url,
             lm.body AS last_message,
             lm.created_at AS last_message_at,
             lm.sender_id AS last_message_sender_id,
             COALESCE(unread.count, 0) AS unread_count
-       FROM users u
+       FROM (${baseWhere}) u
        LEFT JOIN LATERAL (
          SELECT body, created_at, sender_id
            FROM messages
-          WHERE (sender_id = u.id AND recipient_id = $2)
-             OR (sender_id = $2 AND recipient_id = u.id)
+          WHERE (sender_id = u.id AND recipient_id = $1)
+             OR (sender_id = $1 AND recipient_id = u.id)
           ORDER BY created_at DESC
           LIMIT 1
        ) lm ON true
        LEFT JOIN LATERAL (
          SELECT COUNT(*) AS count
            FROM messages
+          WHERE sender_id = u.id AND recipient_id = $1 AND read_at IS NULL
+       ) unread ON true
+      ORDER BY lm.created_at DESC NULLS LAST, u.name`,
+    params
+  );
+}
+
+// GET /api/messages/contacts — com quem é que este utilizador pode falar:
+// - Membro de ginásio: só vê staff do ginásio
+// - Coach (PT/nutricionista): vê toda a gente do ginásio + os seus clientes externos
+// - Cliente externo (gym_id = NULL): vê apenas os seus coaches
+async function listContacts(req, res) {
+  const isStaff = STAFF_ROLES.includes(req.user.role);
+  const isCoach = req.user.role === "personal_trainer" || req.user.role === "nutritionist";
+  const me = req.user.id;
+
+  if (!req.user.gymId) {
+    // Cliente externo: só vê os seus coaches.
+    const result = await pool.query(
+      `SELECT ${CONTACT_COLS},
+              lm.body AS last_message, lm.created_at AS last_message_at,
+              lm.sender_id AS last_message_sender_id,
+              COALESCE(unread.count, 0) AS unread_count
+         FROM external_coach_clients ecc
+         JOIN users u ON u.id = ecc.coach_id
+         LEFT JOIN LATERAL (
+           SELECT body, created_at, sender_id FROM messages
+            WHERE (sender_id = u.id AND recipient_id = $1)
+               OR (sender_id = $1 AND recipient_id = u.id)
+            ORDER BY created_at DESC LIMIT 1
+         ) lm ON true
+         LEFT JOIN LATERAL (
+           SELECT COUNT(*) AS count FROM messages
+            WHERE sender_id = u.id AND recipient_id = $1 AND read_at IS NULL
+         ) unread ON true
+        WHERE ecc.client_id = $1
+        ORDER BY lm.created_at DESC NULLS LAST, u.name`,
+      [me]
+    );
+    return res.json(result.rows);
+  }
+
+  // Utilizador de ginásio: contactos do ginásio (filtrados por role se membro).
+  const gymRows = await pool.query(
+    `SELECT ${CONTACT_COLS},
+            lm.body AS last_message, lm.created_at AS last_message_at,
+            lm.sender_id AS last_message_sender_id,
+            COALESCE(unread.count, 0) AS unread_count
+       FROM users u
+       LEFT JOIN LATERAL (
+         SELECT body, created_at, sender_id FROM messages
+          WHERE (sender_id = u.id AND recipient_id = $2)
+             OR (sender_id = $2 AND recipient_id = u.id)
+          ORDER BY created_at DESC LIMIT 1
+       ) lm ON true
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*) AS count FROM messages
           WHERE sender_id = u.id AND recipient_id = $2 AND read_at IS NULL
        ) unread ON true
-      WHERE u.gym_id = $1
-        AND u.id != $2
+      WHERE u.gym_id = $1 AND u.id != $2
         AND ($3::boolean IS FALSE OR u.role != 'member')
       ORDER BY lm.created_at DESC NULLS LAST, u.name`,
-    [req.user.gymId, req.user.id, !isStaff]
+    [req.user.gymId, me, !isStaff]
   );
-  res.json(result.rows);
+
+  if (!isCoach) return res.json(gymRows.rows);
+
+  // Coach: também inclui os clientes externos que não estão no ginásio.
+  const extRows = await pool.query(
+    `SELECT ${CONTACT_COLS},
+            lm.body AS last_message, lm.created_at AS last_message_at,
+            lm.sender_id AS last_message_sender_id,
+            COALESCE(unread.count, 0) AS unread_count
+       FROM external_coach_clients ecc
+       JOIN users u ON u.id = ecc.client_id AND (u.gym_id IS NULL OR u.gym_id <> $1)
+       LEFT JOIN LATERAL (
+         SELECT body, created_at, sender_id FROM messages
+          WHERE (sender_id = u.id AND recipient_id = $2)
+             OR (sender_id = $2 AND recipient_id = u.id)
+          ORDER BY created_at DESC LIMIT 1
+       ) lm ON true
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*) AS count FROM messages
+          WHERE sender_id = u.id AND recipient_id = $2 AND read_at IS NULL
+       ) unread ON true
+      WHERE ecc.coach_id = $2
+      ORDER BY lm.created_at DESC NULLS LAST, u.name`,
+    [req.user.gymId, me]
+  );
+
+  const seen = new Set(gymRows.rows.map((r) => r.id));
+  const merged = [...gymRows.rows, ...extRows.rows.filter((r) => !seen.has(r.id))];
+  merged.sort((a, b) => {
+    if (!a.last_message_at && !b.last_message_at) return a.name.localeCompare(b.name);
+    if (!a.last_message_at) return 1;
+    if (!b.last_message_at) return -1;
+    return new Date(b.last_message_at) - new Date(a.last_message_at);
+  });
+  res.json(merged);
 }
 
 // GET /api/messages/:otherUserId — a conversa entre o utilizador autenticado
@@ -72,12 +158,26 @@ async function sendMessage(req, res) {
 
   const recipientResult = await pool.query("SELECT gym_id, role FROM users WHERE id = $1", [otherId]);
   const recipient = recipientResult.rows[0];
-  if (!recipient || recipient.gym_id !== req.user.gymId) {
+  if (!recipient) return res.status(404).json({ message: "Destinatário não encontrado." });
+
+  const isCoach = req.user.role === "personal_trainer" || req.user.role === "nutritionist";
+  const isSenderStaff = STAFF_ROLES.includes(req.user.role);
+  const sameGym = recipient.gym_id !== null && recipient.gym_id === req.user.gymId;
+  const senderExternal = !req.user.gymId;
+
+  // Verificar se existe uma ligação coach↔cliente externo em qualquer direção.
+  const extLink = await pool.query(
+    `SELECT 1 FROM external_coach_clients
+      WHERE (coach_id = $1 AND client_id = $2) OR (coach_id = $2 AND client_id = $1)`,
+    [req.user.id, otherId]
+  );
+  const hasExtLink = extLink.rows.length > 0;
+
+  if (!sameGym && !hasExtLink) {
     return res.status(404).json({ message: "Destinatário não encontrado." });
   }
 
-  const isSenderStaff = STAFF_ROLES.includes(req.user.role);
-  if (!isSenderStaff && recipient.role === "member") {
+  if (!isSenderStaff && !senderExternal && !hasExtLink && recipient.role === "member") {
     return res.status(403).json({ message: "Só podes enviar mensagens a staff do ginásio." });
   }
 
@@ -166,8 +266,10 @@ async function broadcastMessage(req, res) {
   let targets;
   if (Array.isArray(member_ids) && member_ids.length > 0) {
     const result = await pool.query(
-      `SELECT id, name FROM users WHERE id = ANY($1::int[]) AND gym_id = $2 AND role = 'member'`,
-      [member_ids, req.user.gymId]
+      // Lista explícita (ex: o resultado filtrado de /members, que inclui
+      // staff): qualquer pessoa do ginásio menos o próprio remetente.
+      `SELECT id, name FROM users WHERE id = ANY($1::int[]) AND gym_id = $2 AND id <> $3 AND role <> 'admin'`,
+      [member_ids, req.user.gymId, req.user.id]
     );
     targets = result.rows;
   } else {

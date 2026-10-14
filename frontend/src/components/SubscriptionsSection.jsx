@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import GlassCard from "./GlassCard";
 import Modal from "./Modal";
+import Select from "./Select";
 import { apiRequest } from "../api/client";
 
 // `gym_membership` não tem `staffRole`/`staffLabel` de propósito — é só
@@ -80,19 +81,16 @@ function SubscriptionEditor({ memberId, subscriptions, staffByRole, onSaved, onC
                 <label className="field-label" htmlFor={`staff-${service.type}`}>
                   {service.staffLabel}
                 </label>
-                <select
+                <Select
                   id={`staff-${service.type}`}
-                  className="glass-input"
                   value={draft.assigned_staff_id}
-                  onChange={(e) => updateDraft(service.type, { assigned_staff_id: e.target.value })}
-                >
-                  <option value="">Por atribuir</option>
-                  {staffByRole[service.staffRole].map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(staffId) => updateDraft(service.type, { assigned_staff_id: staffId })}
+                  options={[
+                    { value: "", label: "Por atribuir" },
+                    ...staffByRole[service.staffRole].map((s) => ({ value: String(s.id), label: s.name })),
+                  ]}
+                  ariaLabel={service.staffLabel}
+                />
               </div>
             )}
           </div>
@@ -158,7 +156,10 @@ export default function SubscriptionsSection({ memberId, editable, selfView = fa
                 </span>
               </div>
               {current.is_active && service.staffRole && (
-                <span className="subscription-compact-staff">{current.assigned_staff_name || "Por atribuir"}</span>
+                <span className="subscription-compact-staff">
+                  {current.assigned_staff_name || "Por atribuir"}
+                  {current.is_external && <span className="client-source-badge client-source-external" style={{ marginLeft: 6 }}>Externo</span>}
+                </span>
               )}
             </div>
           );

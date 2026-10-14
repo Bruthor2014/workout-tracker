@@ -1,112 +1,27 @@
 import { useState } from "react";
 import GlassCard from "./GlassCard";
+import MealEditor from "./MealEditor";
+import { IconFileText, IconPlusCircle, IconSave, IconUtensils } from "./Icons";
 import { apiRequest } from "../api/client";
-
-const emptyItem = () => ({ food_name: "", quantity: "" });
-const emptyOption = () => ({ items: [emptyItem()] });
-const emptyMeal = () => ({ name: "", options: [emptyOption()] });
-
-function planToFormMeals(plan) {
-  return plan.meals.map((meal) => ({
-    name: meal.name,
-    options: meal.options.map((option) => ({
-      items:
-        option.items.length > 0
-          ? option.items.map((item) => ({ food_name: item.food_name, quantity: item.quantity ?? "" }))
-          : [emptyItem()],
-    })),
-  }));
-}
+import { emptyMeal, formMealToApi, mealToForm } from "../utils/mealForm";
 
 // Formulário de criação/edição de um plano de nutrição: várias refeições
 // (nome livre — "Pequeno-almoço", "Lanche da manhã", ...), cada uma com uma
 // ou mais opções, e cada opção com os seus elementos individuais +
 // quantidade (ex: "Ovos" — "2 unidades", "Torrada integral" — "1 fatia").
+// Cada refeição é um MealEditor (o mesmo usado para editar só uma refeição
+// a partir do cartão do plano).
 // Passar `initialPlan` (com `method="PUT"`) pré-preenche tudo a partir de um
 // plano existente em vez de começar em branco.
 export default function NewNutritionPlanForm({ submitPath, method = "POST", initialPlan, onCreated, onCancel }) {
   const [name, setName] = useState(initialPlan?.name ?? "");
   const [description, setDescription] = useState(initialPlan?.description ?? "");
-  const [meals, setMeals] = useState(initialPlan ? planToFormMeals(initialPlan) : [emptyMeal()]);
+  const [meals, setMeals] = useState(initialPlan ? initialPlan.meals.map(mealToForm) : [emptyMeal()]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function updateMealName(mealIndex, value) {
-    setMeals((prev) => prev.map((meal, i) => (i === mealIndex ? { ...meal, name: value } : meal)));
-  }
-
-  function addMeal() {
-    setMeals((prev) => [...prev, emptyMeal()]);
-  }
-
-  function removeMeal(mealIndex) {
-    setMeals((prev) => prev.filter((_, i) => i !== mealIndex));
-  }
-
-  function addOption(mealIndex) {
-    setMeals((prev) =>
-      prev.map((meal, i) => (i === mealIndex ? { ...meal, options: [...meal.options, emptyOption()] } : meal))
-    );
-  }
-
-  function removeOption(mealIndex, optIndex) {
-    setMeals((prev) =>
-      prev.map((meal, i) =>
-        i !== mealIndex ? meal : { ...meal, options: meal.options.filter((_, j) => j !== optIndex) }
-      )
-    );
-  }
-
-  function updateItem(mealIndex, optIndex, itemIndex, field, value) {
-    setMeals((prev) =>
-      prev.map((meal, i) =>
-        i !== mealIndex
-          ? meal
-          : {
-              ...meal,
-              options: meal.options.map((option, j) =>
-                j !== optIndex
-                  ? option
-                  : {
-                      ...option,
-                      items: option.items.map((item, k) =>
-                        k === itemIndex ? { ...item, [field]: value } : item
-                      ),
-                    }
-              ),
-            }
-      )
-    );
-  }
-
-  function addItem(mealIndex, optIndex) {
-    setMeals((prev) =>
-      prev.map((meal, i) =>
-        i !== mealIndex
-          ? meal
-          : {
-              ...meal,
-              options: meal.options.map((option, j) =>
-                j !== optIndex ? option : { ...option, items: [...option.items, emptyItem()] }
-              ),
-            }
-      )
-    );
-  }
-
-  function removeItem(mealIndex, optIndex, itemIndex) {
-    setMeals((prev) =>
-      prev.map((meal, i) =>
-        i !== mealIndex
-          ? meal
-          : {
-              ...meal,
-              options: meal.options.map((option, j) =>
-                j !== optIndex ? option : { ...option, items: option.items.filter((_, k) => k !== itemIndex) }
-              ),
-            }
-      )
-    );
+  function updateMeal(mealIndex, meal) {
+    setMeals((prev) => prev.map((m, i) => (i === mealIndex ? meal : m)));
   }
 
   async function handleSubmit(e) {
@@ -116,18 +31,7 @@ export default function NewNutritionPlanForm({ submitPath, method = "POST", init
     try {
       await apiRequest(submitPath, {
         method,
-        body: {
-          name,
-          description,
-          meals: meals.map((meal) => ({
-            name: meal.name,
-            options: meal.options.map((option) => ({
-              items: option.items
-                .filter((item) => item.food_name.trim())
-                .map((item) => ({ food_name: item.food_name.trim(), quantity: item.quantity.trim() || null })),
-            })),
-          })),
-        },
+        body: { name, description, meals: meals.map(formMealToApi) },
       });
       onCreated();
     } catch (err) {
@@ -138,142 +42,79 @@ export default function NewNutritionPlanForm({ submitPath, method = "POST", init
   }
 
   return (
-    <GlassCard className="form-card" strong>
-      <h3>{initialPlan ? "Editar plano de nutrição" : "Novo plano de nutrição"}</h3>
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginTop: 14 }}>
-          <label className="field-label" htmlFor="nutrition-name">
-            Nome do plano
-          </label>
-          <input
-            id="nutrition-name"
-            type="text"
-            className="glass-input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Ex: Plano de manutenção"
-            required
-          />
+    <form className="nutrition-form" onSubmit={handleSubmit}>
+      <GlassCard className="log-card">
+        <div className="log-card-header">
+          <IconFileText size={26} />
+          <h2>{initialPlan ? "Editar plano" : "Detalhes do plano"}</h2>
         </div>
-
-        <div style={{ marginTop: 14 }}>
-          <label className="field-label" htmlFor="nutrition-description">
-            Descrição (opcional)
-          </label>
-          <input
-            id="nutrition-description"
-            type="text"
-            className="glass-input"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </div>
-
-        {meals.map((meal, mealIndex) => (
-          <div className="plan-day-block" key={mealIndex}>
-            <div className="plan-day-header">
-              <input
-                type="text"
-                className="glass-input"
-                value={meal.name}
-                onChange={(e) => updateMealName(mealIndex, e.target.value)}
-                placeholder="Ex: Pequeno-almoço"
-                required
-              />
-              <button
-                type="button"
-                className="glass-button glass-button-secondary"
-                onClick={() => removeMeal(mealIndex)}
-                disabled={meals.length === 1}
-              >
-                Remover refeição
-              </button>
-            </div>
-
-            {meal.options.map((option, optIndex) => (
-              <div className="meal-option-block" key={optIndex}>
-                <div className="meal-option-block-header">
-                  <span className="field-label" style={{ margin: 0 }}>
-                    Opção {optIndex + 1}
-                  </span>
-                  <button
-                    type="button"
-                    className="glass-button glass-button-secondary"
-                    onClick={() => removeOption(mealIndex, optIndex)}
-                    disabled={meal.options.length === 1}
-                  >
-                    Remover opção
-                  </button>
-                </div>
-
-                <div className="meal-item-row-header">
-                  <span>Elemento</span>
-                  <span>Quantidade</span>
-                  <span></span>
-                </div>
-                {option.items.map((item, itemIndex) => (
-                  <div className="meal-item-row" key={itemIndex}>
-                    <input
-                      type="text"
-                      className="glass-input"
-                      value={item.food_name}
-                      onChange={(e) => updateItem(mealIndex, optIndex, itemIndex, "food_name", e.target.value)}
-                      placeholder="Ex: Ovos"
-                      required
-                    />
-                    <input
-                      type="text"
-                      className="glass-input"
-                      value={item.quantity}
-                      onChange={(e) => updateItem(mealIndex, optIndex, itemIndex, "quantity", e.target.value)}
-                      placeholder="Ex: 2 unidades"
-                    />
-                    <button
-                      type="button"
-                      className="glass-button glass-button-secondary"
-                      onClick={() => removeItem(mealIndex, optIndex, itemIndex)}
-                      disabled={option.items.length === 1}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  className="glass-button glass-button-secondary"
-                  onClick={() => addItem(mealIndex, optIndex)}
-                >
-                  + Adicionar elemento
-                </button>
-              </div>
-            ))}
-
-            <button
-              type="button"
-              className="glass-button glass-button-secondary"
-              onClick={() => addOption(mealIndex)}
-              style={{ marginTop: 10 }}
-            >
-              + Adicionar opção
-            </button>
+        <div className="nutrition-details-grid">
+          <div>
+            <label className="log-label" htmlFor="nutrition-name">
+              Nome do plano
+            </label>
+            <input
+              id="nutrition-name"
+              type="text"
+              className="glass-input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ex: Plano de manutenção"
+              required
+            />
           </div>
-        ))}
+          <div>
+            <label className="log-label" htmlFor="nutrition-description">
+              Descrição <span>(opcional)</span>
+            </label>
+            <textarea
+              id="nutrition-description"
+              className="glass-input nutrition-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Ex: Objetivo, horários, notas para o membro..."
+              rows={2}
+            />
+          </div>
+        </div>
+      </GlassCard>
 
-        <button type="button" className="glass-button glass-button-secondary" onClick={addMeal} style={{ marginTop: 14 }}>
-          + Adicionar refeição
-        </button>
+      <GlassCard className="log-card">
+        <div className="log-card-header">
+          <IconUtensils size={26} />
+          <h2>Refeições</h2>
+        </div>
 
-        {error && <p className="error-text">{error}</p>}
+        <div className="nutrition-meals">
+          {meals.map((meal, mealIndex) => (
+            <MealEditor
+              key={mealIndex}
+              meal={meal}
+              onChange={(updated) => updateMeal(mealIndex, updated)}
+              onRemove={() => setMeals((prev) => prev.filter((_, i) => i !== mealIndex))}
+              canRemove={meals.length > 1}
+              onError={setError}
+            />
+          ))}
 
-        <div className="form-actions">
-          <button type="button" className="glass-button glass-button-secondary" onClick={onCancel}>
-            Cancelar
-          </button>
-          <button type="submit" className="glass-button" disabled={loading}>
-            {loading ? "A guardar..." : "Guardar plano"}
+          <button type="button" className="log-add-set" onClick={() => setMeals((prev) => [...prev, emptyMeal()])}>
+            <IconPlusCircle size={18} />
+            Adicionar refeição
           </button>
         </div>
-      </form>
-    </GlassCard>
+      </GlassCard>
+
+      {error && <p className="error-text">{error}</p>}
+
+      <div className="log-actions">
+        <button type="button" className="glass-button glass-button-secondary" onClick={onCancel}>
+          Cancelar
+        </button>
+        <button type="submit" className="glass-button log-save-button" disabled={loading}>
+          <IconSave size={18} />
+          {loading ? "A guardar..." : "Guardar plano"}
+        </button>
+      </div>
+    </form>
   );
 }

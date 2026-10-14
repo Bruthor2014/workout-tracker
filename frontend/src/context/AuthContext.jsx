@@ -1,4 +1,5 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import { applyTheme, resetTheme } from "../utils/theme";
 
 const AuthContext = createContext(null);
 
@@ -9,11 +10,22 @@ export function AuthProvider({ children }) {
     return stored ? JSON.parse(stored) : null;
   });
 
+  // Aplica o tema do ginásio na carga inicial (utilizador já estava logado).
+  useEffect(() => {
+    const stored = localStorage.getItem("user");
+    if (stored) {
+      const u = JSON.parse(stored);
+      if (u?.gym_accent) applyTheme(u.gym_accent);
+    }
+  }, []);
+
   function login(newToken, newUser) {
     localStorage.setItem("token", newToken);
     localStorage.setItem("user", JSON.stringify(newUser));
     setToken(newToken);
     setUser(newUser);
+    if (newUser?.gym_accent) applyTheme(newUser.gym_accent);
+    else resetTheme();
   }
 
   function logout() {
@@ -21,6 +33,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("user");
     setToken(null);
     setUser(null);
+    resetTheme();
   }
 
   // Atualiza campos do user guardado (ex: avatar_url depois de um upload)
@@ -29,6 +42,10 @@ export function AuthProvider({ children }) {
     setUser((prev) => {
       const next = { ...prev, ...patch };
       localStorage.setItem("user", JSON.stringify(next));
+      if (patch.gym_accent !== undefined) {
+        if (patch.gym_accent) applyTheme(patch.gym_accent);
+        else resetTheme();
+      }
       return next;
     });
   }

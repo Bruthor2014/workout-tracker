@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import GlassCard from "../components/GlassCard";
 import Modal from "../components/Modal";
+import Select from "../components/Select";
 import BodyMetricsSection from "../components/BodyMetricsSection";
+import ProfileProgress from "../components/ProfileProgress";
 import SubscriptionsSection from "../components/SubscriptionsSection";
 import NewPlanForm from "../components/NewPlanForm";
 import PlanCard from "../components/PlanCard";
@@ -10,16 +12,19 @@ import NewNutritionPlanForm from "../components/NewNutritionPlanForm";
 import NutritionPlanCard from "../components/NutritionPlanCard";
 import { apiRequest, resolveAssetUrl } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { ROLE_LABELS } from "../utils/roles";
 
 const SUBSCRIPTION_MANAGER_ROLES = ["gym_owner", "receptionist"];
 // Rececionistas veem a área de Membros (para gerir subscrições) mas não têm
 // acesso a treino/nutrição/composição corporal — esses continuam só para
 // quem já os geria antes.
 const CLINICAL_STAFF_ROLES = ["gym_owner", "personal_trainer", "nutritionist"];
+// Criar planos: PTs (treino) e nutricionistas (nutrição) — o CEO só consulta.
 // Repor password e mudar role são mais sensíveis do que gerir
 // subscrições — só gym_owner.
 const PASSWORD_MANAGER_ROLES = ["gym_owner"];
 const ROLE_MANAGER_ROLES = ["gym_owner"];
+const COACH_ROLES = ["personal_trainer", "nutritionist"];
 
 // Espelha ASSIGNABLE_ROLES do backend — nunca inclui gym_owner nem admin
 // (ver memberController.js para o porquê).
@@ -74,18 +79,7 @@ function ChangeRoleButton({ memberId }) {
                 <label className="field-label" htmlFor="new-role">
                   Novo role
                 </label>
-                <select
-                  id="new-role"
-                  className="glass-input"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                >
-                  {ASSIGNABLE_ROLES.map((r) => (
-                    <option key={r.value} value={r.value}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
+                <Select id="new-role" value={role} onChange={setRole} options={ASSIGNABLE_ROLES} ariaLabel="Novo role" />
               </div>
               {error && <p className="error-text">{error}</p>}
               <div className="form-actions">
@@ -185,6 +179,54 @@ function ResetPasswordButton({ memberId }) {
   );
 }
 
+const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const fmtDate = (key) => { if (!key) return null; const d = new Date(`${String(key).slice(0,10)}T00:00:00`); return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
+
+// Clientes de um PT/nutricionista (apenas clientes do ginásio) — visível para CEO e rececionista.
+// O CEO pode clicar num cliente para ir ao seu perfil e gerir subscrições a partir daí.
+function StaffClientsSection({ staffId }) {
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    apiRequest(`/clients/of/${staffId}`)
+      .then(setClients)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [staffId]);
+
+  if (loading) return <p className="text-secondary">A carregar...</p>;
+  if (error) return <p className="error-text">{error}</p>;
+  if (!clients.length) return <p className="text-secondary">Este coach ainda não tem clientes do ginásio atribuídos.</p>;
+
+  return (
+    <div className="member-grid clients-grid" style={{ marginTop: 12 }}>
+      {clients.map((c) => {
+        const url = resolveAssetUrl(c.avatar_url);
+        return (
+          <Link key={c.id} to={`/members/${c.id}`} style={{ textDecoration: "none" }}>
+            <GlassCard className="member-tile client-tile" strong style={{ cursor: "pointer" }}>
+              <div className="member-tile-header client-tile-head">
+                {url
+                  ? <img src={url} alt="" className="member-card-avatar" />
+                  : <span className="member-card-avatar member-card-avatar-fallback">{c.name.charAt(0).toUpperCase()}</span>}
+                <div className="member-tile-identity">
+                  <span className="member-tile-name">{c.name}</span>
+                  <span className="member-tile-email">{c.started_at ? `Desde ${fmtDate(c.started_at)}` : c.email}</span>
+                </div>
+              </div>
+              <span className="text-secondary" style={{ fontSize: "0.78rem", marginTop: 6, display: "block" }}>
+                Ver perfil →
+              </span>
+            </GlassCard>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
 function MemberAvatar({ member }) {
   const avatarUrl = resolveAssetUrl(member.avatar_url);
   return (
@@ -194,7 +236,7 @@ function MemberAvatar({ member }) {
   );
 }
 
-function PlansSection({ memberId }) {
+function PlansSection({ memberId, canCreate }) {
   const [plans, setPlans] = useState([]);
   const [exercises, setExercises] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -217,7 +259,7 @@ function PlansSection({ memberId }) {
 
   return (
     <div style={{ marginTop: 12 }}>
-      {!showForm && (
+      {canCreate && !showForm && (
         <button className="glass-button" onClick={() => setShowForm(true)}>
           + Novo plano para este membro
         </button>
@@ -246,7 +288,7 @@ function PlansSection({ memberId }) {
         </GlassCard>
       )}
 
-      <div className="session-grid" style={{ marginTop: 12 }}>
+      <div className="plan-list" style={{ marginTop: 12 }}>
         {plans.map((plan) => (
           <PlanCard key={plan.id} plan={plan} exercises={exercises} editable onChanged={loadPlans} />
         ))}
@@ -255,7 +297,7 @@ function PlansSection({ memberId }) {
   );
 }
 
-function NutritionSection({ memberId }) {
+function NutritionSection({ memberId, canCreate }) {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -277,9 +319,9 @@ function NutritionSection({ memberId }) {
   return (
     <div style={{ marginTop: 12 }}>
       <p className="text-secondary" style={{ marginBottom: 10 }}>
-        Inclui planos criados por ti e planos que o próprio membro tenha criado.
+        Inclui os planos do staff e os que o próprio membro tenha criado.
       </p>
-      {!showForm && (
+      {canCreate && !showForm && (
         <button className="glass-button" onClick={() => setShowForm(true)}>
           + Novo plano de nutrição
         </button>
@@ -307,7 +349,7 @@ function NutritionSection({ memberId }) {
         </GlassCard>
       )}
 
-      <div className="session-grid" style={{ marginTop: 12 }}>
+      <div className="plan-list" style={{ marginTop: 12 }}>
         {plans.map((plan) => (
           <NutritionPlanCard key={plan.id} plan={plan} editable onChanged={loadPlans} />
         ))}
@@ -331,7 +373,7 @@ export default function MemberDetailPage() {
   return (
     <div className="page-container">
       <div className="page-header">
-        <h1>Perfil do membro</h1>
+        <h1>{member && member.role !== "member" ? "Perfil da equipa" : "Perfil do membro"}</h1>
       </div>
       {error && <p className="error-text">{error}</p>}
 
@@ -343,7 +385,7 @@ export default function MemberDetailPage() {
               <div>
                 <h3>{member.name}</h3>
                 <p className="text-secondary">{member.email}</p>
-                <span className="role-badge role-badge-static">Membro</span>
+                <span className="role-badge role-badge-static">{ROLE_LABELS[member.role] || "Membro"}</span>
                 {(PASSWORD_MANAGER_ROLES.includes(user.role) || ROLE_MANAGER_ROLES.includes(user.role)) && (
                   <div style={{ marginTop: 6, display: "flex", gap: 10 }}>
                     {PASSWORD_MANAGER_ROLES.includes(user.role) && <ResetPasswordButton memberId={id} />}
@@ -358,8 +400,10 @@ export default function MemberDetailPage() {
         </GlassCard>
       )}
 
-      {CLINICAL_STAFF_ROLES.includes(user.role) && (
+      {CLINICAL_STAFF_ROLES.includes(user.role) && member && !COACH_ROLES.includes(member.role) && (
         <>
+          <ProfileProgress memberId={id} />
+
           <div style={{ marginTop: 28 }}>
             <BodyMetricsSection memberId={id} />
           </div>
@@ -367,12 +411,21 @@ export default function MemberDetailPage() {
           <h2 className="section-title" style={{ textAlign: "left", marginTop: 28 }}>
             Planos de treino
           </h2>
-          <PlansSection memberId={id} />
+          <PlansSection memberId={id} canCreate={user.role === "personal_trainer"} />
 
           <h2 className="section-title" style={{ textAlign: "left", marginTop: 28 }}>
             Plano de nutrição
           </h2>
-          <NutritionSection memberId={id} />
+          <NutritionSection memberId={id} canCreate={user.role === "nutritionist"} />
+        </>
+      )}
+
+      {SUBSCRIPTION_MANAGER_ROLES.includes(user.role) && member && COACH_ROLES.includes(member.role) && (
+        <>
+          <h2 className="section-title" style={{ textAlign: "left", marginTop: 28 }}>
+            Clientes
+          </h2>
+          <StaffClientsSection staffId={id} />
         </>
       )}
     </div>

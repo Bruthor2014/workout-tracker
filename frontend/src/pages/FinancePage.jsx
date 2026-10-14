@@ -37,20 +37,23 @@ function fmtEuro(n) {
 const DAY_NAMES = ["", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const ACTIVITY_LABELS = { floor: "Sala", class: "Aula", reception: "Receção", assessments: "Avaliações", admin: "Admin", other: "Outro" };
 
-// Hours worked already exclude absent time — pay is simply rate × hours_worked.
-function calcEarnings(r, ptClientsOverride) {
-  const clients = ptClientsOverride != null ? Number(ptClientsOverride) : Number(r.pt_clients_count || r.month_pt_clients || 0);
-  const pt_earnings = Number(r.rate_pt_month || 0) * clients;
+// Gym cut only applies to gym clients, never to external clients (100% to PT).
+function calcEarnings(r, gymClientsOverride) {
+  const gymClients = gymClientsOverride != null
+    ? Number(gymClientsOverride)
+    : Number(r.month_gym_clients ?? r.pt_clients_count ?? 0);
+  const extIncome = Number(r.month_ext_income || 0);
+  const gym_pt_earnings = Number(r.rate_pt_month || 0) * gymClients;
   const other =
     Number(r.base_salary || 0) +
     Number(r.rate_reception_h || 0) * Number(r.hours_reception || r.month_hours_reception || 0) +
     Number(r.rate_sala_h || 0)      * Number(r.hours_sala      || r.month_hours_sala      || 0) +
     Number(r.rate_class_h || 0)     * Number(r.hours_class     || r.month_hours_class     || 0);
-  const gross = other + pt_earnings;
+  const gross = other + gym_pt_earnings + extIncome;
   let cut = 0;
-  if (r.gym_cut_pct != null)        cut = pt_earnings * Number(r.gym_cut_pct) / 100;
-  else if (r.gym_cut_fixed != null) cut = clients * Number(r.gym_cut_fixed);
-  return { gross, cut, net: gross - cut, pt_earnings };
+  if (r.gym_cut_pct != null)        cut = gym_pt_earnings * Number(r.gym_cut_pct) / 100;
+  else if (r.gym_cut_fixed != null) cut = gymClients * Number(r.gym_cut_fixed);
+  return { gross, cut, net: gross - cut, gym_pt_earnings, extIncome };
 }
 
 // ─── Modal taxas ───────────────────────────────────────────────────────────
@@ -233,7 +236,7 @@ function StaffMonthModal({ staffId, staffName, month, onClose }) {
 function PayMonthModal({ staffList, month, onClose, onSaved }) {
   const [ptClients, setPtClients] = useState(() => {
     const init = {};
-    staffList.forEach((s) => { init[s.id] = String(s.month_pt_clients || 0); });
+    staffList.forEach((s) => { init[s.id] = String(s.month_gym_clients || 0); });
     return init;
   });
   const [saving, setSaving] = useState(false);
@@ -510,20 +513,20 @@ export default function FinancePage() {
                           </div>
                         ))}
 
-                        {/* PT clients — shown separately so gym cut context is clear */}
-                        {Number(s.rate_pt_month) > 0 && (() => {
-                          const clients = Number(s.month_pt_clients || 0);
-                          const ptE = Number(s.rate_pt_month) * clients;
+                        {/* Clientes do ginásio — sujeitos à retenção do ginásio */}
+                        {Number(s.rate_pt_month) > 0 && Number(s.month_gym_clients) > 0 && (() => {
+                          const gymC = Number(s.month_gym_clients);
+                          const ptE  = Number(s.rate_pt_month) * gymC;
                           const cutLabel = s.gym_cut_pct != null
-                            ? `${s.gym_cut_pct}% dos clientes PT`
+                            ? `${s.gym_cut_pct}% dos clientes do ginásio`
                             : s.gym_cut_fixed != null
-                            ? `${fmtEuro(s.gym_cut_fixed)}/cliente PT`
+                            ? `${fmtEuro(s.gym_cut_fixed)}/cliente ginásio`
                             : null;
                           return (
                             <div style={{ borderTop: "1px solid var(--glass-border)", paddingTop: 6, marginTop: 3, display: "flex", flexDirection: "column", gap: 3 }}>
                               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                <span className="text-secondary">Clientes PT ({clients})</span>
-                                <span>{clients} × {fmtEuro(s.rate_pt_month)} = {fmtEuro(ptE)}</span>
+                                <span className="text-secondary">Clientes ginásio ({gymC})</span>
+                                <span>{gymC} × {fmtEuro(s.rate_pt_month)} = {fmtEuro(ptE)}</span>
                               </div>
                               {cutLabel && cut > 0 && (
                                 <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -534,6 +537,16 @@ export default function FinancePage() {
                             </div>
                           );
                         })()}
+
+                        {/* Clientes externos — 100% para o PT, sem retenção */}
+                        {Number(s.month_ext_clients) > 0 && (
+                          <div style={{ borderTop: "1px solid var(--glass-border)", paddingTop: 6, marginTop: 3, display: "flex", flexDirection: "column", gap: 3 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                              <span className="text-secondary">Clientes externos ({s.month_ext_clients}) <span style={{ fontSize: "0.72rem", color: "#4ade80" }}>100% PT</span></span>
+                              <span>{fmtEuro(s.month_ext_income)}</span>
+                            </div>
+                          </div>
+                        )}
 
                         <div style={{ borderTop: "1px solid var(--glass-border)", paddingTop: 4, marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 600, fontSize: "1rem" }}>

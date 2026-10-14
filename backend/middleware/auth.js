@@ -31,4 +31,16 @@ function requireRole(...allowedRoles) {
   };
 }
 
-module.exports = { requireAuth, requireRole };
+// O CEO (gym_owner) e o DONO da plataforma são contas de gestão:
+// não têm treinos, planos nem dados pessoais próprios.
+function notOwner(req, res, next) {
+  if (req.user.role === "gym_owner" || req.user.role === "dono") {
+    return res.status(403).json({ message: "A conta de gestão não tem treinos nem dados pessoais." });
+  }
+  next();
+}
+
+// Garante que a rota só pode ser acedida pelo dono da plataforma.
+const requireDono = requireRole("dono");
+
+module.exports = { requireAuth, requireRole, requireDono, notOwner };

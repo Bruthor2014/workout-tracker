@@ -1,10 +1,61 @@
-import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import GlassCard from "../components/GlassCard";
-import ExercisePicker from "../components/ExercisePicker";
+import WorkoutExerciseBlock from "../components/WorkoutExerciseBlock";
+import AchievementToast from "../components/AchievementToast";
+import Select from "../components/Select";
+import DatePicker from "../components/DatePicker";
+import {
+  IconBarChart,
+  IconDumbbell,
+  IconFileText,
+  IconLayers,
+  IconNotes,
+  IconPlay,
+  IconPlusCircle,
+  IconSave,
+  IconStopwatch,
+} from "../components/Icons";
 import { apiRequest } from "../api/client";
+import { toDateKey } from "../utils/date";
+import { formatReps } from "../utils/reps";
+import { setTypeInfo } from "../utils/setTypes";
+import { CARDIO_GROUP } from "../utils/muscleGroups";
 
-const emptySet = () => ({ exercise_id: "", reps: "", weight: "" });
+// O formulário trabalha com exercícios, cada um com a sua técnica ("normal",
+// "drop", "rest_pause"... — ver utils/setTypes.js) e as suas séries; a API continua a receber/devolver uma
+// lista plana de séries (exercise_id, reps, weight, set_type), convertida à
+// entrada (groupSetsByExercise) e à saída (handleSubmit). `key` é só para
+// o React identificar cada bloco ao remover um exercício do meio da lista.
+// Cada série tem ainda `done` (marcada como feita com ✓ — só no ecrã) e,
+// quando vem de um plano, `repsHint`/`weightHint` com o alvo, mostrado
+// como fundo dos campos (os valores em si ficam por preencher).
+let nextExerciseKey = 1;
+const emptySet = () => ({ reps: "", weight: "", repsHint: "", weightHint: "", done: false });
+const newExercise = (exerciseId = "", sets = [emptySet()], type = "normal") => ({
+  key: nextExerciseKey++,
+  exercise_id: exerciseId,
+  type,
+  sets,
+});
+
+const toFormSet = (reps, weight) => ({
+  ...emptySet(),
+  reps: reps != null ? String(reps) : "",
+  weight: weight != null ? String(Number(weight)) : "",
+});
+
+// Séries da API -> exercícios, pela ordem em que cada exercício aparece
+// pela primeira vez; o tipo do exercício é o da sua primeira série.
+function groupSetsByExercise(apiSets) {
+  const byExercise = new Map();
+  for (const set of apiSets) {
+    const exerciseId = String(set.exercise_id);
+    if (!byExercise.has(exerciseId)) byExercise.set(exerciseId, newExercise(exerciseId, [], set.set_type || "normal"));
+    byExercise.get(exerciseId).sets.push(toFormSet(set.reps, set.weight));
+  }
+  return byExercise.size ? [...byExercise.values()] : [newExercise()];
+}
 
 function formatElapsed(seconds) {
   const h = Math.floor(seconds / 3600);
@@ -14,9 +65,33 @@ function formatElapsed(seconds) {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
+// O tick de cada segundo vive só aqui — se estivesse no estado da página,
+// re-renderizava o formulário inteiro (todas as séries e o seletor de
+// exercícios, mesmo aberto) uma vez por segundo durante o treino.
+function ActiveWorkoutTimer({ start }) {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    const tick = () => setElapsedSeconds(Math.floor((Date.now() - start.getTime()) / 1000));
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [start]);
+
+  return (
+    <div className="log-timer">
+      <span className="log-timer-dot" />
+      <span className="log-timer-time">{formatElapsed(elapsedSeconds)}</span>
+    </div>
+  );
+}
+
 export default function LogWorkoutPage() {
   const { id } = useParams();
   const isEditing = Boolean(id);
+  // "Iniciar treino" num dia de um plano (PlanCard) abre /log?plan=X&day=Y:
+  // o treino começa logo com os exercícios desse dia.
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [exercises, setExercises] = useState([]);
   const [plans, setPlans] = useState([]);
@@ -24,28 +99,55 @@ export default function LogWorkoutPage() {
   const [selectedDayId, setSelectedDayId] = useState("");
 
   const [title, setTitle] = useState("");
-  const [performedAt, setPerformedAt] = useState(() =>
-    new Date().toISOString().slice(0, 10)
-  );
+  // /log?date=YYYY-MM-DD (ex: "Registar treino" num dia sem treinos do
+  // calendário) já abre com essa data.
+  const [performedAt, setPerformedAt] = useState(() => {
+    const date = searchParams.get("date");
+    return date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : toDateKey(new Date());
+  });
   const [notes, setNotes] = useState("");
   const [durationHours, setDurationHours] = useState("");
   const [durationMinutesPart, setDurationMinutesPart] = useState("");
-  const [sets, setSets] = useState([emptySet()]);
+  const [workoutExercises, setWorkoutExercises] = useState(() => [newExercise()]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingSession, setLoadingSession] = useState(isEditing);
   const navigate = useNavigate();
 
   const [activeStart, setActiveStart] = useState(null);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const intervalRef = useRef(null);
+
+  // Recorde (maior peso) de cada exercício: exercise_id -> { weight, reps,
+  // performed_at }. Ao editar um treino, esse treino fica de fora.
+  const [records, setRecords] = useState(() => new Map());
+  // Melhor peso já marcado como feito neste treino, por exercício — para
+  // só dar os parabéns de novo se voltar a subir.
+  const bestThisWorkout = useRef(new Map());
+  const [achievement, setAchievement] = useState(null);
+  const closeAchievement = useCallback(() => setAchievement(null), []);
 
   useEffect(() => {
     apiRequest("/exercises")
       .then(setExercises)
       .catch((err) => setError(err.message));
+    apiRequest(`/sessions/records${isEditing ? `?exclude_session=${id}` : ""}`)
+      .then((rows) => setRecords(new Map(rows.map((r) => [String(r.exercise_id), r]))))
+      .catch(() => {});
     if (!isEditing) {
-      apiRequest("/plans").then(setPlans).catch(() => {});
+      apiRequest("/plans")
+        .then((rows) => {
+          setPlans(rows);
+          const plan = rows.find((p) => String(p.id) === searchParams.get("plan"));
+          const day = plan?.days.find((d) => String(d.id) === searchParams.get("day"));
+          if (day) {
+            setSelectedPlanId(String(plan.id));
+            setSelectedDayId(String(day.id));
+            startWorkout(day);
+            // Tira os parâmetros do endereço para não voltar a iniciar ao
+            // recarregar/voltar atrás.
+            setSearchParams({}, { replace: true });
+          }
+        })
+        .catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -62,61 +164,108 @@ export default function LogWorkoutPage() {
           setDurationHours(String(Math.floor(totalMinutes / 60)));
           setDurationMinutesPart(String(totalMinutes % 60));
         }
-        setSets(
-          session.sets.map((s) => ({
-            exercise_id: String(s.exercise_id),
-            reps: String(s.reps),
-            weight: s.weight != null ? String(Number(s.weight)) : "",
-          }))
-        );
+        setWorkoutExercises(groupSetsByExercise(session.sets));
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoadingSession(false));
   }, [id, isEditing]);
 
-  useEffect(() => {
-    if (!activeStart) return;
-    intervalRef.current = setInterval(() => {
-      setElapsedSeconds(Math.floor((Date.now() - activeStart.getTime()) / 1000));
-    }, 1000);
-    return () => clearInterval(intervalRef.current);
-  }, [activeStart]);
-
   const selectedPlan = plans.find((p) => String(p.id) === selectedPlanId);
   const daysForSelectedPlan = selectedPlan ? selectedPlan.days : [];
 
   function handleStart() {
-    setActiveStart(new Date());
-    setElapsedSeconds(0);
+    startWorkout(daysForSelectedPlan.find((d) => String(d.id) === selectedDayId));
+  }
 
-    const day = daysForSelectedPlan.find((d) => String(d.id) === selectedDayId);
+  // Inicia o cronómetro; com um dia de plano, preenche o título e os
+  // exercícios a partir dele.
+  function startWorkout(day) {
+    setActiveStart(new Date());
+
     if (day) {
-      if (!title) setTitle(day.name);
-      setSets(
+      setTitle((current) => current || day.name);
+      // Cada exercício do plano já vem com o nº de séries previsto
+      // (target_sets); as reps/carga alvo ficam como fundo dos campos.
+      setWorkoutExercises(
         day.exercises.length
-          ? day.exercises.map((ex) => ({
-              exercise_id: String(ex.exercise_id),
-              reps: ex.target_reps != null ? String(ex.target_reps) : "",
-              weight: ex.target_load != null ? String(Number(ex.target_load)) : "",
-            }))
-          : [emptySet()]
+          ? day.exercises.map((ex) =>
+              newExercise(
+                String(ex.exercise_id),
+                Array.from({ length: Math.max(1, ex.target_sets || 1) }, () => ({
+                  ...emptySet(),
+                  repsHint: formatReps(ex.target_reps, ex.target_reps_max),
+                  weightHint: ex.target_load != null ? Number(ex.target_load).toLocaleString("pt-PT") : "",
+                }))
+              )
+            )
+          : [newExercise()]
       );
     }
   }
 
-  function updateSet(index, field, value) {
-    setSets((prev) =>
-      prev.map((row, i) => (i === index ? { ...row, [field]: value } : row))
+  function replaceExercise(exerciseIndex, updated) {
+    setWorkoutExercises((prev) => prev.map((ex, i) => (i === exerciseIndex ? updated : ex)));
+  }
+
+  // Marca/desmarca uma série como feita. Ao marcar, se o peso for maior que
+  // o recorde do exercício (e que o melhor já feito neste treino), mostra a
+  // conquista. Só há "recorde batido" se já existia um recorde.
+  function toggleSetDone(exerciseIndex, setIndex) {
+    const ex = workoutExercises[exerciseIndex];
+    const set = ex.sets[setIndex];
+    const done = !set.done;
+    replaceExercise(exerciseIndex, {
+      ...ex,
+      sets: ex.sets.map((s, j) => (j === setIndex ? { ...s, done } : s)),
+    });
+
+    const weight = Number(set.weight) || 0;
+    const record = records.get(ex.exercise_id);
+    if (!done || !record || weight <= 0) return;
+    const best = Math.max(record.weight, bestThisWorkout.current.get(ex.exercise_id) || 0);
+    if (weight > best) {
+      bestThisWorkout.current.set(ex.exercise_id, weight);
+      const name = exercises.find((e) => String(e.id) === ex.exercise_id)?.name || "Exercício";
+      setAchievement({
+        title: "Novo recorde pessoal!",
+        message: `${name}: ${weight.toLocaleString("pt-PT")} kg × ${set.reps}`,
+        detail: `Anterior: ${record.weight.toLocaleString("pt-PT")} kg — parabéns, continua assim!`,
+      });
+    }
+  }
+
+  function addExercise() {
+    setWorkoutExercises((prev) => [...prev, newExercise()]);
+  }
+
+  function removeExercise(exerciseIndex) {
+    setWorkoutExercises((prev) => prev.filter((_, i) => i !== exerciseIndex));
+  }
+
+  // Séries preenchidas (exercício escolhido + reps), já na forma plana que a
+  // API espera; também alimentam o resumo no cabeçalho. As séries vazias
+  // (ex: o plano previa 4 e só se fizeram 3) ficam simplesmente de fora.
+  const filledSets = workoutExercises
+    .filter((ex) => ex.exercise_id)
+    .flatMap((ex) =>
+      ex.sets.filter((set) => set.reps).map((set) => ({ ...set, exercise_id: ex.exercise_id, set_type: ex.type }))
     );
-  }
-
-  function addSetRow() {
-    setSets((prev) => [...prev, emptySet()]);
-  }
-
-  function removeSetRow(index) {
-    setSets((prev) => prev.filter((_, i) => i !== index));
-  }
+  const cardioIds = new Set(exercises.filter((e) => e.muscle_group === CARDIO_GROUP).map((e) => String(e.id)));
+  // Cardio (minutos × km) não entra no volume.
+  const totalVolume = filledSets
+    .filter((set) => !cardioIds.has(set.exercise_id))
+    .reduce((sum, set) => sum + Number(set.reps) * (Number(set.weight) || 0), 0);
+  const exerciseCount = workoutExercises.filter((ex) => ex.exercise_id).length;
+  // Drop set, rest-pause e cluster contam como uma série (as linhas são
+  // partes dela).
+  const seriesCount = workoutExercises
+    .filter((ex) => ex.exercise_id)
+    .reduce((sum, ex) => {
+      const filled = ex.sets.filter((set) => set.reps).length;
+      return sum + (setTypeInfo(ex.type).singleSeries ? Math.min(filled, 1) : filled);
+    }, 0);
+  const exerciseNameById = new Map(exercises.map((e) => [String(e.id), e.name]));
+  const doneCount = filledSets.filter((set) => set.done).length;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -127,13 +276,12 @@ export default function LogWorkoutPage() {
         title: title || null,
         performed_at: performedAt,
         notes,
-        sets: sets
-          .filter((s) => s.exercise_id && s.reps)
-          .map((s) => ({
-            exercise_id: Number(s.exercise_id),
-            reps: Number(s.reps),
-            weight: s.weight ? Number(s.weight) : null,
-          })),
+        sets: filledSets.map(({ exercise_id, reps, weight, set_type }) => ({
+          exercise_id: Number(exercise_id),
+          reps: Number(reps),
+          weight: weight ? Number(weight) : null,
+          set_type,
+        })),
       };
 
       if (activeStart) {
@@ -175,203 +323,220 @@ export default function LogWorkoutPage() {
   }
 
   return (
-    <div className="page-center">
-      <GlassCard className="form-card">
+    <div className="page-container log-page">
+      <div className="log-header">
+        <span className="log-header-icon">
+          <IconPlusCircle size={22} />
+        </span>
         <h1>{isEditing ? "Editar treino" : "Registar treino"}</h1>
+      </div>
 
-        {!isEditing && !activeStart && (
-          <div className="start-workout-box">
-            <p className="text-secondary" style={{ marginTop: 0 }}>
-              Podes iniciar o treino agora (com cronómetro), a partir de um
-              plano ou em branco — ou simplesmente preencher o formulário
-              abaixo sem cronómetro.
-            </p>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <select
-                className="glass-input"
-                style={{ flex: "1 1 200px" }}
-                value={selectedPlanId}
-                onChange={(e) => {
-                  setSelectedPlanId(e.target.value);
-                  setSelectedDayId("");
-                }}
-              >
-                <option value="">Treino livre (sem plano)</option>
-                {plans.map((plan) => (
-                  <option key={plan.id} value={plan.id}>
-                    {plan.name}
-                  </option>
-                ))}
-              </select>
-              {selectedPlan && (
-                <select
-                  className="glass-input"
-                  style={{ flex: "1 1 200px" }}
-                  value={selectedDayId}
-                  onChange={(e) => setSelectedDayId(e.target.value)}
-                >
-                  <option value="">Escolhe o dia...</option>
-                  {daysForSelectedPlan.map((day) => (
-                    <option key={day.id} value={day.id}>
-                      {day.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <button type="button" className="glass-button" onClick={handleStart}>
-                ▶ Iniciar treino
-              </button>
-            </div>
-          </div>
-        )}
-
-        {activeStart && (
-          <div className="active-workout-timer">
-            <span className="active-workout-dot" />
-            Treino em curso — {formatElapsed(elapsedSeconds)}
-          </div>
-        )}
-
-        <p className="text-secondary">Adiciona as séries que fizeste.</p>
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginTop: 20 }}>
-            <label className="field-label" htmlFor="title">
-              Título (opcional)
-            </label>
-            <input
-              id="title"
-              type="text"
-              className="glass-input"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ex: Peito e tríceps"
-            />
-          </div>
-
-          <div style={{ marginTop: 14 }}>
-            <label className="field-label" htmlFor="date">
-              Data
-            </label>
-            <input
-              id="date"
-              type="date"
-              className="glass-input"
-              value={performedAt}
-              onChange={(e) => setPerformedAt(e.target.value)}
-              required
-            />
+      {!isEditing && (
+        <GlassCard className={`log-card log-start${activeStart ? " running" : ""}`} strong>
+          <span className="log-start-icon">
+            <IconStopwatch size={34} />
+          </span>
+          <div className="log-start-text">
+            <h2>{activeStart ? "Treino em curso" : "Iniciar com cronómetro"}</h2>
+            {activeStart ? (
+              <ActiveWorkoutTimer start={activeStart} />
+            ) : (
+              <p>
+                Podes iniciar o treino agora (com cronómetro), a partir de um plano ou em branco — ou simplesmente
+                preencher o formulário abaixo sem cronómetro.
+              </p>
+            )}
           </div>
 
           {!activeStart && (
-            <div style={{ marginTop: 14 }}>
-              <label className="field-label">Duração (opcional)</label>
-              <div style={{ display: "flex", gap: 10, maxWidth: 220 }}>
-                <div style={{ flex: 1 }}>
-                  <input
-                    id="duration-hours"
-                    type="number"
-                    min="0"
-                    className="glass-input"
-                    value={durationHours}
-                    onChange={(e) => setDurationHours(e.target.value)}
-                    placeholder="0"
-                    aria-label="Horas"
-                  />
-                  <span className="field-hint">horas</span>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <input
-                    id="duration-minutes"
-                    type="number"
-                    min="0"
-                    max="59"
-                    className="glass-input"
-                    value={durationMinutesPart}
-                    onChange={(e) => setDurationMinutesPart(e.target.value)}
-                    placeholder="0"
-                    aria-label="Minutos"
-                  />
-                  <span className="field-hint">min</span>
-                </div>
-              </div>
+            <div className="log-start-actions">
+              <Select
+                className="log-select"
+                value={selectedPlanId}
+                onChange={(planId) => {
+                  setSelectedPlanId(planId);
+                  setSelectedDayId("");
+                }}
+                options={[
+                  { value: "", label: "Treino livre (sem plano)" },
+                  ...plans.map((plan) => ({ value: String(plan.id), label: plan.name })),
+                ]}
+                ariaLabel="Plano de treino"
+              />
+              {selectedPlan && (
+                <Select
+                  className="log-select"
+                  value={selectedDayId}
+                  onChange={setSelectedDayId}
+                  options={daysForSelectedPlan.map((day) => ({ value: String(day.id), label: day.name }))}
+                  placeholder="Escolhe o dia..."
+                  ariaLabel="Dia do plano"
+                />
+              )}
+              <button type="button" className="glass-button log-start-button" onClick={handleStart}>
+                <IconPlay size={18} />
+                Iniciar treino
+              </button>
             </div>
           )}
+        </GlassCard>
+      )}
 
-          <div style={{ marginTop: 14 }}>
-            <div className="set-row-header">
-              <span>Exercício</span>
-              <span>Reps</span>
-              <span>Carga (kg)</span>
-              <span></span>
-              <span></span>
+      <form className="log-form" onSubmit={handleSubmit}>
+        <GlassCard className="log-card">
+          <div className="log-card-header">
+            <IconFileText size={26} />
+            <h2>Detalhes do treino</h2>
+          </div>
+
+          <div className={`log-details-grid${activeStart ? " no-duration" : ""}`}>
+            <div>
+              <label className="log-label" htmlFor="title">
+                Título <span>(opcional)</span>
+              </label>
+              <input
+                id="title"
+                type="text"
+                className="glass-input"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Ex: Peito e tríceps"
+              />
             </div>
-            {sets.map((row, index) => (
-              <div className="set-row" key={index}>
-                <ExercisePicker
-                  exercises={exercises}
-                  value={row.exercise_id}
-                  onChange={(exerciseId) => updateSet(index, "exercise_id", exerciseId)}
-                />
-                <input
-                  type="number"
-                  min="1"
-                  className="glass-input"
-                  value={row.reps}
-                  onChange={(e) => updateSet(index, "reps", e.target.value)}
-                  required
-                />
-                <input
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  className="glass-input"
-                  value={row.weight}
-                  onChange={(e) => updateSet(index, "weight", e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="glass-button glass-button-secondary"
-                  onClick={() => removeSetRow(index)}
-                  disabled={sets.length === 1}
-                >
-                  ×
-                </button>
+
+            <div>
+              <label className="log-label" htmlFor="date">
+                Data
+              </label>
+              <DatePicker id="date" value={performedAt} onChange={setPerformedAt} max={toDateKey(new Date())} ariaLabel="Data do treino" />
+            </div>
+
+            {!activeStart && (
+              <div>
+                <label className="log-label" htmlFor="duration-hours">
+                  Duração <span>(opcional)</span>
+                </label>
+                <div className="log-duration">
+                  <div className="log-suffix-input">
+                    <input
+                      id="duration-hours"
+                      type="number"
+                      min="0"
+                      className="glass-input"
+                      value={durationHours}
+                      onChange={(e) => setDurationHours(e.target.value)}
+                      placeholder="0"
+                      aria-label="Horas"
+                    />
+                    <span>horas</span>
+                  </div>
+                  <div className="log-suffix-input">
+                    <input
+                      id="duration-minutes"
+                      type="number"
+                      min="0"
+                      max="59"
+                      className="glass-input"
+                      value={durationMinutesPart}
+                      onChange={(e) => setDurationMinutesPart(e.target.value)}
+                      placeholder="0"
+                      aria-label="Minutos"
+                    />
+                    <span>min</span>
+                  </div>
+                </div>
               </div>
+            )}
+          </div>
+        </GlassCard>
+
+        <GlassCard className="log-card">
+          <div className="log-card-header">
+            <IconDumbbell size={28} />
+            <h2>Exercícios</h2>
+            <div className="log-sets-summary">
+              <span>
+                <IconDumbbell size={18} />
+                Exercícios: <strong>{exerciseCount}</strong>
+              </span>
+              <span className="log-sets-summary-divider" />
+              <span>
+                <IconLayers size={18} />
+                Séries: <strong>{seriesCount}</strong>
+                {filledSets.length > 0 && (
+                  <span className="log-done-count">
+                    ({doneCount}/{filledSets.length} ✓)
+                  </span>
+                )}
+              </span>
+              <span className="log-sets-summary-divider" />
+              <span>
+                <IconBarChart size={18} />
+                Volume: <strong>{Math.round(totalVolume).toLocaleString("pt-PT")} kg</strong>
+              </span>
+            </div>
+          </div>
+
+          <div className="log-exercises">
+            {workoutExercises.map((ex, exerciseIndex) => (
+              <WorkoutExerciseBlock
+                key={ex.key}
+                ex={ex}
+                index={exerciseIndex}
+                exercises={exercises}
+                record={records.get(ex.exercise_id)}
+                nextExerciseName={exerciseNameById.get(workoutExercises[exerciseIndex + 1]?.exercise_id)}
+                canRemove={workoutExercises.length > 1}
+                onChange={(updated) => replaceExercise(exerciseIndex, updated)}
+                onRemove={() => removeExercise(exerciseIndex)}
+                onToggleDone={(setIndex) => toggleSetDone(exerciseIndex, setIndex)}
+              />
             ))}
-            <button type="button" className="glass-button glass-button-secondary" onClick={addSetRow}>
-              + Adicionar série
+
+            <button type="button" className="log-add-set" onClick={addExercise}>
+              <IconPlusCircle size={18} />
+              Adicionar exercício
             </button>
           </div>
+        </GlassCard>
 
-          <div style={{ marginTop: 14 }}>
-            <label className="field-label" htmlFor="notes">
-              Notas (opcional)
-            </label>
-            <input
-              id="notes"
-              type="text"
-              className="glass-input"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Como correu o treino?"
-            />
+        <GlassCard className="log-card">
+          <div className="log-card-header">
+            <IconNotes size={24} />
+            <h2>
+              Notas <span>(opcional)</span>
+            </h2>
           </div>
+          <textarea
+            id="notes"
+            className="glass-input log-notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Como correu o treino?"
+            rows={3}
+          />
+        </GlassCard>
 
-          {error && <p className="error-text">{error}</p>}
+        {error && <p className="error-text">{error}</p>}
 
-          <div className="form-actions">
-            <button type="submit" className="glass-button" disabled={loading}>
-              {loading
-                ? "A guardar..."
-                : activeStart
-                ? "Terminar treino"
-                : isEditing
-                ? "Guardar alterações"
-                : "Guardar treino"}
-            </button>
-          </div>
-        </form>
-      </GlassCard>
+        <div className="log-actions">
+          <button type="button" className="glass-button glass-button-secondary" onClick={() => navigate(-1)}>
+            Cancelar
+          </button>
+          <button type="submit" className="glass-button log-save-button" disabled={loading}>
+            <IconSave size={18} />
+            {loading
+              ? "A guardar..."
+              : activeStart
+              ? "Terminar treino"
+              : isEditing
+              ? "Guardar alterações"
+              : "Guardar treino"}
+          </button>
+        </div>
+      </form>
+
+      {achievement && <AchievementToast achievement={achievement} onClose={closeAchievement} />}
     </div>
   );
 }

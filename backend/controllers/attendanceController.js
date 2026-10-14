@@ -1,11 +1,11 @@
 const pool = require("../db/pool");
 
 // GET /api/attendance/daily?date=YYYY-MM-DD
-// Returns all staff shifts for a day with their attendance status.
+// Returns staff shifts + group classes for a day with their attendance/confirmation status.
 async function listDaily(req, res) {
   const date = req.query.date || new Date().toLocaleDateString("sv");
 
-  const result = await pool.query(
+  const shiftsResult = await pool.query(
     `SELECT u.id AS staff_id, u.name AS staff_name, u.role::text AS staff_role, u.avatar_url,
             ss.id AS shift_id,
             to_char(ss.start_time,'HH24:MI') AS shift_start,
@@ -18,7 +18,12 @@ async function listDaily(req, res) {
             COALESCE(sa.adjustments, '[]'::jsonb) AS adjustments,
             sa.notes,
             cb.name AS confirmed_by_name,
-            sa.confirmed_at
+            sa.confirmed_at,
+            'shift'::text AS source,
+            NULL::int AS class_id,
+            NULL::text AS class_title,
+            NULL::boolean AS instructor_confirmed,
+            NULL::boolean AS reception_confirmed
        FROM staff_shifts ss
        JOIN users u ON u.id = ss.staff_id
        LEFT JOIN staff_attendance sa
@@ -26,11 +31,48 @@ async function listDaily(req, res) {
            AND sa.shift_date = $2::date AND sa.shift_start = ss.start_time
        LEFT JOIN users cb ON cb.id = sa.confirmed_by
       WHERE ss.gym_id = $1
-        AND ss.weekday = EXTRACT(ISODOW FROM $2::date)::int
-      ORDER BY ss.start_time, u.name`,
+        AND ss.weekday = EXTRACT(ISODOW FROM $2::date)::int`,
     [req.user.gymId, date]
   );
-  res.json(result.rows);
+
+  // Group classes for this weekday that aren't cancelled for this date
+  const classesResult = await pool.query(
+    `SELECT u.id AS staff_id, u.name AS staff_name, u.role::text AS staff_role, u.avatar_url,
+            NULL::int AS shift_id,
+            to_char(gc.start_time,'HH24:MI') AS shift_start,
+            to_char(gc.end_time,'HH24:MI') AS shift_end,
+            'class'::text AS activity,
+            ROUND(EXTRACT(EPOCH FROM (gc.end_time - gc.start_time))/3600.0::numeric, 2) AS shift_hours,
+            NULL::int AS attendance_id,
+            CASE
+              WHEN co.instructor_confirmed AND co.reception_confirmed THEN 'present'
+              WHEN co.instructor_confirmed OR co.reception_confirmed THEN 'adjusted'
+              ELSE 'pending'
+            END AS status,
+            0::numeric AS deducted_hours,
+            '[]'::jsonb AS adjustments,
+            NULL::text AS notes,
+            NULL::text AS confirmed_by_name,
+            NULL::timestamptz AS confirmed_at,
+            'class'::text AS source,
+            gc.id AS class_id,
+            gc.title AS class_title,
+            COALESCE(co.instructor_confirmed, false) AS instructor_confirmed,
+            COALESCE(co.reception_confirmed, false) AS reception_confirmed
+       FROM group_classes gc
+       JOIN users u ON u.id = gc.instructor_id
+       LEFT JOIN class_occurrences co ON co.class_id = gc.id AND co.class_date = $2::date
+       LEFT JOIN class_cancellations cc ON cc.class_id = gc.id AND cc.class_date = $2::date
+      WHERE gc.gym_id = $1
+        AND gc.instructor_id IS NOT NULL
+        AND gc.weekday = EXTRACT(ISODOW FROM $2::date)::int
+        AND cc.class_id IS NULL`,
+    [req.user.gymId, date]
+  );
+
+  const rows = [...shiftsResult.rows, ...classesResult.rows];
+  rows.sort((a, b) => a.shift_start.localeCompare(b.shift_start) || a.staff_name.localeCompare(b.staff_name));
+  res.json(rows);
 }
 
 // POST /api/attendance

@@ -2,6 +2,8 @@ require("dotenv").config({ quiet: true });
 const path = require("path");
 const express = require("express");
 const cors = require("cors");
+const compression = require("compression");
+const rateLimit = require("express-rate-limit");
 
 const authRoutes = require("./routes/authRoutes");
 const exerciseRoutes = require("./routes/exerciseRoutes");
@@ -24,8 +26,17 @@ const { startClassChecker } = require("./services/classChecker");
 
 const app = express();
 
+// Gzip all responses (cuts bandwidth ~70% for JSON APIs)
+app.use(compression());
 app.use(cors());
 app.use(express.json());
+
+// Rate limiting: 500 req/15 min per IP globally; tighter on auth endpoints
+const globalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 500, standardHeaders: true, legacyHeaders: false });
+const authLimiter   = rateLimit({ windowMs: 15 * 60 * 1000, max: 30,  standardHeaders: true, legacyHeaders: false });
+app.use("/api/", globalLimiter);
+app.use("/api/auth/login",    authLimiter);
+app.use("/api/auth/register", authLimiter);
 // Serve os avatares carregados (ex: /uploads/avatars/user-2-171....jpg)
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 

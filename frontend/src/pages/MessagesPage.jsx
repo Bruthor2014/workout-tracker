@@ -3,16 +3,7 @@ import GlassCard from "../components/GlassCard";
 import BroadcastModal from "../components/BroadcastModal";
 import { apiRequest, resolveAssetUrl } from "../api/client";
 import { useAuth } from "../context/AuthContext";
-
-const ROLE_LABELS = {
-  member: "Membro",
-  admin: "Admin",
-  gym_owner: "CEO",
-  personal_trainer: "Personal Trainer",
-  nutritionist: "Nutricionista",
-  intern: "Estagiário",
-  receptionist: "Rececionista",
-};
+import { ROLE_LABELS } from "../utils/roles";
 
 const STAFF_ROLES = ["gym_owner", "personal_trainer", "nutritionist"];
 
@@ -47,6 +38,7 @@ export default function MessagesPage() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [showBroadcast, setShowBroadcast] = useState(false);
+  const [contactSearch, setContactSearch] = useState("");
 
   const bottomRef = useRef(null);
 
@@ -108,6 +100,9 @@ export default function MessagesPage() {
 
   const selectedContact = contacts.find((c) => c.id === selectedId);
   const isStaff = STAFF_ROLES.includes(user.role);
+  const filteredContacts = contactSearch.trim()
+    ? contacts.filter((c) => c.name.toLowerCase().includes(contactSearch.toLowerCase()))
+    : contacts;
 
   return (
     <div className="page-container">
@@ -124,11 +119,24 @@ export default function MessagesPage() {
 
       <div className="messages-layout">
         <GlassCard className="messages-contacts" strong>
+          <div style={{ padding: "10px 12px 0" }}>
+            <input
+              type="text"
+              className="glass-input"
+              placeholder="Pesquisar..."
+              value={contactSearch}
+              onChange={(e) => setContactSearch(e.target.value)}
+              style={{ width: "100%", fontSize: "0.85rem", padding: "6px 10px" }}
+            />
+          </div>
           {loadingContacts && <p className="text-secondary" style={{ padding: 16 }}>A carregar...</p>}
           {!loadingContacts && contacts.length === 0 && (
             <p className="text-secondary" style={{ padding: 16 }}>Ainda não há ninguém para falares.</p>
           )}
-          {contacts.map((contact) => (
+          {!loadingContacts && filteredContacts.length === 0 && contacts.length > 0 && (
+            <p className="text-secondary" style={{ padding: 16 }}>Sem resultados para "{contactSearch}".</p>
+          )}
+          {filteredContacts.map((contact) => (
             <button
               key={contact.id}
               type="button"

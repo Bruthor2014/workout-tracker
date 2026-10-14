@@ -34,6 +34,41 @@ function monthLabel(ym) {
   return new Date(y, m - 1, 1).toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
 }
 
+function ExtClientFeeRow({ ec }) {
+  const [fee, setFee] = useState(String(ec.monthly_fee || "0"));
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function handleSave() {
+    setSaving(true); setSaved(false);
+    try {
+      await apiRequest(`/finance/my/ext-client/${ec.id}/fee`, { method: "PUT", body: { monthly_fee: Number(fee) } });
+      ec.monthly_fee = Number(fee);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <GlassCard style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 600, fontSize: "0.9rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ec.client_name}</div>
+        <div className="text-secondary" style={{ fontSize: "0.75rem" }}>{ec.client_email}</div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+        <input type="number" min="0" step="0.01" className="glass-input"
+          style={{ width: 80, textAlign: "right", fontSize: "0.85rem" }}
+          value={fee} onChange={(e) => setFee(e.target.value)} />
+        <span className="text-secondary" style={{ fontSize: "0.8rem" }}>€/mês</span>
+        <button className="glass-button" style={{ padding: "4px 10px", fontSize: "0.78rem" }}
+          onClick={handleSave} disabled={saving}>
+          {saved ? "✓" : saving ? "..." : "Guardar"}
+        </button>
+      </div>
+    </GlassCard>
+  );
+}
+
 function calcEarnings(rates, week) {
   if (!rates) return { gross: 0, cut: 0, net: 0 };
   const base = Number(rates.base_salary || 0);
@@ -361,6 +396,24 @@ export default function MySchedulePage() {
                 </div>
               </>
             )}
+          </>
+        )}
+
+        {/* Clientes externos — PT define o valor mensal de cada um */}
+        {financeData?.external_clients?.length > 0 && (
+          <>
+            <h3 style={{ fontSize: "0.95rem", margin: "20px 0 8px" }}>Clientes externos</h3>
+            <p className="text-secondary" style={{ fontSize: "0.78rem", marginBottom: 10 }}>
+              100% do valor fica para ti. Define aqui quanto cobras a cada cliente por mês.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {financeData.external_clients.map((ec) => (
+                <ExtClientFeeRow key={ec.id} ec={ec} />
+              ))}
+            </div>
+            <div style={{ textAlign: "right", marginTop: 8, fontSize: "0.88rem", fontWeight: 600 }}>
+              Total externos: {fmtEuro(financeData.external_clients.reduce((a, c) => a + Number(c.monthly_fee || 0), 0))}
+            </div>
           </>
         )}
 

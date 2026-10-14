@@ -9,7 +9,7 @@ const STAFF_ROLE_FOR_SERVICE = {
 };
 
 async function findMember(memberId, gymId) {
-  const result = await pool.query(`SELECT id FROM users WHERE id = $1 AND gym_id = $2 AND role = 'member'`, [
+  const result = await pool.query(`SELECT id FROM users WHERE id = $1 AND gym_id = $2 AND role <> 'admin'`, [
     memberId,
     gymId,
   ]);
@@ -60,9 +60,38 @@ async function getMemberSubscriptions(req, res) {
 }
 
 // GET /api/members/me/subscriptions — o próprio membro vê as suas
-// subscrições e quem lhe está atribuído (só leitura, sem edição própria).
+// subscrições e quem lhe está atribuído. Se não houver subscrição formal
+// mas existir uma ligação de cliente externo, usa-a para preencher o campo.
 async function getMySubscriptions(req, res) {
-  res.json(await fetchSubscriptionsForMember(req.user.id));
+  const subs = await fetchSubscriptionsForMember(req.user.id);
+
+  // Enriquecer com coaches externos quando não há subscrição formal.
+  if (!subs.personal_training.is_active || !subs.nutrition_plan.is_active) {
+    const ext = await pool.query(
+      `SELECT ecc.coach_id, u.name AS coach_name, u.role AS coach_role
+         FROM external_coach_clients ecc
+         JOIN users u ON u.id = ecc.coach_id
+        WHERE ecc.client_id = $1`,
+      [req.user.id]
+    );
+    for (const row of ext.rows) {
+      const serviceType =
+        row.coach_role === "personal_trainer" ? "personal_training"
+        : row.coach_role === "nutritionist" ? "nutrition_plan"
+        : null;
+      if (serviceType && !subs[serviceType].is_active) {
+        subs[serviceType] = {
+          is_active: true,
+          assigned_staff_id: row.coach_id,
+          assigned_staff_name: row.coach_name,
+          assigned_staff_role: row.coach_role,
+          is_external: true,
+        };
+      }
+    }
+  }
+
+  res.json(subs);
 }
 
 // PUT /api/members/:id/subscriptions/:serviceType — ativa/desativa uma
@@ -119,6 +148,17 @@ async function updateMemberSubscription(req, res) {
     await pool.query(`UPDATE member_subscriptions SET is_active = false, ended_at = CURRENT_DATE WHERE id = $1`, [
       activeRow.id,
     ]);
+  }
+
+  // As sessões semanais com um PT/nutricionista que deixou de estar
+  // atribuído a este membro deixam de existir.
+  if (requiredStaffRole) {
+    await pool.query(
+      `DELETE FROM client_sessions cs USING users s
+        WHERE s.id = cs.staff_id AND cs.member_id = $1 AND s.role = $2
+          AND ($3::int IS NULL OR cs.staff_id <> $3)`,
+      [req.params.id, requiredStaffRole, is_active ? staffId : null]
+    );
   }
 
   let assignedStaffName = null;

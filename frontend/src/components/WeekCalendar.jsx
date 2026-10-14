@@ -1,49 +1,93 @@
-import { startOfWeek, toDateKey } from "../utils/date";
-import { IconDumbbell } from "./Icons";
+import { addDays, toDateKey } from "../utils/date";
+import { workoutVisual } from "../utils/muscleGroups";
+import { IconChevronRight, IconDumbbell } from "./Icons";
 
 const WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-// Uma cor viva por dia — só decorativo, dá personalidade ao calendário em
-// vez de ficarem todos iguais.
-const DAY_ACCENTS = ["#a78bfa", "#60a5fa", "#34d399", "#fbbf24", "#fb923c", "#f472b6", "#f87171"];
+const MONTH_LABELS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
-// Mostra os 7 dias da semana atual (Seg-Dom); os dias em que existe uma
-// sessão em `attendedDates` (Set de "YYYY-MM-DD") ficam marcados. Dias sem
-// treino ficam simplesmente sem marca — nada de vermelho/negativo.
-export default function WeekCalendar({ attendedDates }) {
-  const monday = startOfWeek(new Date());
+function shortDate(d) {
+  return `${d.getDate()} ${MONTH_LABELS[d.getMonth()]}`;
+}
+
+// Os 7 dias (Seg-Dom) da semana que começa em `weekStart`, com setas para
+// ir a outras semanas. Cada dia é clicável (`onSelect(dateKey)`) e o
+// escolhido (`selectedKey`) fica destacado. `workoutsByDate` é um Map
+// "YYYY-MM-DD" -> muscle_groups do treino desse dia: os dias com treino
+// mostram a figura/cor desse treino (ver workoutVisual); os restantes um
+// haltere apagado — nada de vermelho/negativo.
+export default function WeekCalendar({ weekStart, selectedKey, workoutsByDate, onSelect, onPrevWeek, onNextWeek, canGoNext }) {
   const todayKey = toDateKey(new Date());
+  const weekEnd = addDays(weekStart, 6);
 
   const days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
+    const d = addDays(weekStart, i);
     const key = toDateKey(d);
     return {
       key,
       label: WEEKDAY_LABELS[i],
-      dayNumber: `${d.getDate()} ${MONTH_LABELS[d.getMonth()]}`,
-      attended: attendedDates.has(key),
+      dayNumber: shortDate(d),
+      attended: workoutsByDate.has(key),
+      visual: workoutsByDate.has(key) ? workoutVisual(workoutsByDate.get(key)) : null,
       isToday: key === todayKey,
+      isFuture: key > todayKey,
     };
   });
 
   return (
-    <div className="week-calendar">
-      {days.map((day, i) => (
-        <div
-          key={day.key}
-          className={`week-day${day.attended ? " attended" : ""}${day.isToday ? " today" : ""}`}
-          style={{ "--day-accent": DAY_ACCENTS[i] }}
-          title={day.attended ? "Foste ao ginásio" : undefined}
-        >
-          <span className="week-day-icon">
-            <IconDumbbell size={16} />
+    <div className="week-calendar-wrap">
+      <div className="week-calendar-nav">
+        <button type="button" className="week-nav-button" onClick={onPrevWeek} aria-label="Semana anterior">
+          <span className="week-nav-prev">
+            <IconChevronRight size={18} />
           </span>
-          <span className="week-day-label">{day.label}</span>
-          <span className="week-day-number">{day.dayNumber}</span>
-          {day.attended && <span className="week-day-check" />}
-        </div>
-      ))}
+        </button>
+        <span className="week-calendar-range">
+          {shortDate(weekStart)} – {shortDate(weekEnd)} {weekEnd.getFullYear()}
+        </span>
+        <button
+          type="button"
+          className="week-nav-button"
+          onClick={onNextWeek}
+          disabled={!canGoNext}
+          aria-label="Semana seguinte"
+        >
+          <IconChevronRight size={18} />
+        </button>
+      </div>
+
+      <div className="week-calendar">
+        {days.map((day) => {
+          const Icon = day.visual ? day.visual.icon : IconDumbbell;
+          const classes = ["week-day"];
+          if (day.attended) classes.push("attended");
+          if (day.isToday) classes.push("today");
+          if (day.key === selectedKey) classes.push("selected");
+          if (day.isFuture) classes.push("future");
+          return (
+            <button
+              type="button"
+              key={day.key}
+              className={classes.join(" ")}
+              style={day.visual ? { "--day-accent": day.visual.color } : undefined}
+              onClick={() => onSelect(day.key)}
+              aria-pressed={day.key === selectedKey}
+              aria-label={`${day.label}, ${day.dayNumber}${day.attended ? " — com treino" : ""}`}
+            >
+              <span className="week-day-icon">
+                <Icon size={day.visual ? 34 : 22} />
+              </span>
+              <span className="week-day-text">
+                <span className="week-day-label">
+                  {day.label}
+                  {day.isToday && <span className="week-day-today">Hoje</span>}
+                </span>
+                <span className="week-day-number">{day.dayNumber}</span>
+                {day.attended && <span className="week-day-check" />}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

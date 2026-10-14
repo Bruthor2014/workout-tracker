@@ -55,12 +55,13 @@ EXERCÍCIOS
   (Peito, Costas, Pernas, Ombros, Bíceps, Tríceps, Abdominais, Glúteos)
 - Seletor de exercícios novo (ExercisePicker.jsx): pesquisa + filtro por
   grupo muscular, com imagem real do exercício
-- Imagens vêm da API pública da wger.de (gratuita, sem chave) — verificada
-  e confirmada real antes de usar. Guardadas em `exercises.image_url`.
-- DOIS exercícios partilham imagem por não haver uma específica:
-  "Afundo" usa a mesma imagem de "Agachamento"; "Abdominal Bicicleta" usa
-  a mesma de "Abdominal Reto" (Crunches). Se quiseres, dá para procurar
-  melhores substitutos mais tarde.
+- Imagens trocadas da wger.de (estilos/formatos misturados, algumas
+  desfocadas) para o free-exercise-db (github.com/yuhonas/free-exercise-db,
+  domínio público): fotografias reais, todas no mesmo estilo, JPG 850x567.
+  Cada exercício tem a sua própria imagem (já nenhum partilha). Guardadas
+  em `exercises.image_url`, apontam para raw.githubusercontent.com.
+- schema.sql agora cria o ginásio 1 antes do catálogo (antes falhava numa
+  BD nova por violar a foreign key gym_id).
 
 BUGS REAIS ENCONTRADOS E CORRIGIDOS
 - Modal (editar subscrição, etc.) aparecia confinado/transparente quando
@@ -76,11 +77,9 @@ BUGS REAIS ENCONTRADOS E CORRIGIDOS
 A MEIO / POR DECIDIR
 ======================================================================
 
-1. IMAGENS DOS EXERCÍCIOS — ficou em aberto mesmo antes de saíres. Não
-   chegámos a falar no que falta exatamente melhorar (qualidade das
-   imagens? mais exercícios? mostrar imagem também nos cartões de plano,
-   não só no seletor? os dois exercícios que partilham imagem?). Próxima
-   sessão: perguntar/esclarecer o que falta aqui.
+1. IMAGENS DOS EXERCÍCIOS — qualidade/consistência resolvida (ver acima).
+   Ainda em aberto, se se quiser: mais exercícios, ou mostrar a imagem
+   também nos cartões de plano (hoje só aparece no seletor).
 
 ======================================================================
 PRÓXIMOS PASSOS DISCUTIDOS (Fase B do sistema multi-ginásio/PT independente)

@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import GlassCard from "./GlassCard";
 import EvolutionChart from "./EvolutionChart";
 import Modal from "./Modal";
+import DatePicker from "./DatePicker";
 import { apiRequest } from "../api/client";
+import { toDateKey } from "../utils/date";
 
 const METRIC_FIELDS = [
   { field: "weight_kg", title: "Peso", unit: "kg" },
@@ -23,7 +25,7 @@ const FORM_FIELDS = [
 ];
 
 const emptyMetricForm = () => ({
-  recorded_at: new Date().toISOString().slice(0, 10),
+  recorded_at: toDateKey(new Date()), // data local (toISOString daria o dia anterior perto da meia-noite)
   weight_kg: "",
   body_fat_pct: "",
   lean_mass_kg: "",
@@ -227,13 +229,12 @@ export default function BodyMetricsSection({ memberId, title = "Composição cor
                   <label className="field-label" htmlFor="recorded_at">
                     Data
                   </label>
-                  <input
+                  <DatePicker
                     id="recorded_at"
-                    type="date"
-                    className="glass-input"
                     value={form.recorded_at}
-                    onChange={(e) => setForm((f) => ({ ...f, recorded_at: e.target.value }))}
-                    required
+                    onChange={(recordedAt) => setForm((f) => ({ ...f, recorded_at: recordedAt }))}
+                    max={toDateKey(new Date())}
+                    ariaLabel="Data do registo"
                   />
                 </div>
                 {FORM_FIELDS.map(({ field, label, required }) => (

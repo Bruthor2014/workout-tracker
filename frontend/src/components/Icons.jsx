@@ -112,7 +112,9 @@ export function IconPlusCircle({ size = 24, className }) {
 export function IconMessage({ size = 24, className }) {
   return (
     <svg {...base} width={size} height={size} className={className}>
-      <path d="M4 5h16v11H9l-5 4V5z" />
+      <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-5 4z" />
+      <line x1="8.5" y1="9" x2="15.5" y2="9" />
+      <line x1="8.5" y1="12.5" x2="13" y2="12.5" />
     </svg>
   );
 }
@@ -169,78 +171,6 @@ export function IconLogoMark({ size = 24, className }) {
   );
 }
 
-// Pictogramas por grupo muscular — usados no seletor de exercícios como
-// substituto de uma foto real do movimento (sem capacidade de obter
-// imagens reais neste ambiente). Não ilustram o exercício em si, só a zona
-// do corpo trabalhada.
-
-export function IconMuscleChest({ size = 24, className }) {
-  return (
-    <svg {...base} width={size} height={size} className={className}>
-      <path d="M4 7c1.5-2 4-2 5 0l3 3 3-3c1-2 3.5-2 5 0 1.5 2 1 5-1 7l-7 6-7-6c-2-2-2.5-5-1-7z" />
-    </svg>
-  );
-}
-
-export function IconMuscleBack({ size = 24, className }) {
-  return (
-    <svg {...base} width={size} height={size} className={className}>
-      <path d="M12 3v18" />
-      <path d="M12 6 4 10l3 11 5-6" />
-      <path d="M12 6l8 4-3 11-5-6" />
-    </svg>
-  );
-}
-
-export function IconMuscleLegs({ size = 24, className }) {
-  return (
-    <svg {...base} width={size} height={size} className={className}>
-      <path d="M9 2h6l1 9-2 2 1 9h-3l-1-9-2 2-1-9-2-2z" />
-      <path d="M8 4H5M19 4h-3" />
-    </svg>
-  );
-}
-
-export function IconMuscleShoulders({ size = 24, className }) {
-  return (
-    <svg {...base} width={size} height={size} className={className}>
-      <circle cx="6" cy="8" r="3" />
-      <circle cx="18" cy="8" r="3" />
-      <path d="M6 11v2a6 6 0 0 0 12 0v-2" />
-    </svg>
-  );
-}
-
-export function IconMuscleArm({ size = 24, className }) {
-  return (
-    <svg {...base} width={size} height={size} className={className}>
-      <path d="M6 20V11a4 4 0 0 1 4-4c2.5 0 3 2 5 2a3 3 0 0 0 3-3" />
-      <path d="M6 20h4" />
-    </svg>
-  );
-}
-
-export function IconMuscleCore({ size = 24, className }) {
-  return (
-    <svg {...base} width={size} height={size} className={className}>
-      <rect x="7" y="3" width="10" height="18" rx="3" />
-      <line x1="7" y1="8" x2="17" y2="8" />
-      <line x1="7" y1="13" x2="17" y2="13" />
-      <line x1="7" y1="18" x2="17" y2="18" />
-      <line x1="12" y1="3" x2="12" y2="21" />
-    </svg>
-  );
-}
-
-export function IconMuscleGlutes({ size = 24, className }) {
-  return (
-    <svg {...base} width={size} height={size} className={className}>
-      <path d="M12 4c-4 0-7 3-7 8 0 5 3 8 7 8s7-3 7-8c0-5-3-8-7-8z" />
-      <line x1="12" y1="5" x2="12" y2="19" />
-    </svg>
-  );
-}
-
 export function IconCalendar({ size = 24, className }) {
   return (
     <svg {...base} width={size} height={size} className={className}>
@@ -273,7 +203,191 @@ export function IconRefresh({ size = 24, className }) {
 export function IconFlame({ size = 24, className }) {
   return (
     <svg {...base} width={size} height={size} className={className}>
-      <path d="M12 2c1.5 3 .5 4.5-.5 6-1.5 2-3 3-3 6a4.5 4.5 0 0 0 9 0c0-2-1-3-1.2-4.6-.1-.8.3-1.4.9-1.9 0 2 .6 3 1.3 3.8A6.5 6.5 0 0 1 12 22a6.5 6.5 0 0 1-6.5-6.5C5.5 10 9 8 12 2z" />
+      <path d="M12 2.5c.6 3 3.2 4.8 4.6 7.4 1.8 3.3 1 7.6-2 9.6a6.8 6.8 0 0 1-9.2-2.4c-1.6-2.8-.9-6.3 1.4-8.5.1 1.6.8 2.9 2 3.5-.5-3.9 1.1-7.4 3.2-9.6z" />
+      <path d="M12 21c-1.7 0-3-1.3-3-3 0-1.9 1.5-3 2.3-4.8 1 1.5 2.6 2.4 3.4 3.9.8 1.7-.1 3.9-2.7 3.9z" />
+    </svg>
+  );
+}
+
+export function IconUtensils({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <path d="M6 3v7a2.5 2.5 0 0 0 5 0V3" />
+      <line x1="8.5" y1="3" x2="8.5" y2="21" />
+      <path d="M18 21V3c-2.2 1-3.5 3.6-3.5 7v3H18" />
+    </svg>
+  );
+}
+
+export function IconClock({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <circle cx="12" cy="12" r="8.5" />
+      <polyline points="12 7.5 12 12 15 14" />
+    </svg>
+  );
+}
+
+export function IconTrash({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <path d="M4 7h16" />
+      <path d="M9.5 7V4.5h5V7" />
+      <path d="M6.5 7l1 13h9l1-13" />
+      <path d="M10.5 11v5.5M13.5 11v5.5" />
+    </svg>
+  );
+}
+
+export function IconArrowUp({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <line x1="12" y1="19" x2="12" y2="5" />
+      <polyline points="6 11 12 5 18 11" />
+    </svg>
+  );
+}
+
+// Discos de peso empilhados — volume total levantado.
+export function IconWeightStack({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <ellipse cx="12" cy="6" rx="7.5" ry="2.5" />
+      <path d="M4.5 6v3c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5V6" />
+      <path d="M4.5 12v3c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5v-3" />
+      <path d="M4.5 18c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5v-3" />
+      <path d="M4.5 15v3" />
+    </svg>
+  );
+}
+
+export function IconStopwatch({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <circle cx="12" cy="13.5" r="7.5" />
+      <path d="M12 13.5V10" />
+      <path d="M10 2.5h4M12 2.5V6" />
+      <path d="M18.5 6.5l1.5-1.5" />
+    </svg>
+  );
+}
+
+export function IconFileText({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5" />
+      <path d="M9 13h6M9 17h4" />
+    </svg>
+  );
+}
+
+export function IconNotes({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <rect x="5" y="3" width="14" height="18" rx="2" />
+      <path d="M9 8h6M9 12h6M9 16h3" />
+    </svg>
+  );
+}
+
+export function IconLayers({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <polygon points="12 3 21 8 12 13 3 8 12 3" />
+      <polyline points="3 12.5 12 17.5 21 12.5" />
+      <polyline points="3 16.5 12 21.5 21 16.5" />
+    </svg>
+  );
+}
+
+export function IconSave({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <path d="M5 3h11l4 4v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 1-2z" />
+      <rect x="8" y="3" width="7" height="5" rx="0.5" />
+      <rect x="7" y="13" width="10" height="8" rx="1" />
+    </svg>
+  );
+}
+
+export function IconPlay({ size = 24, className }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} className={className} fill="currentColor">
+      <path d="M8 5.5v13a1 1 0 0 0 1.5.9l10.4-6.5a1 1 0 0 0 0-1.8L9.5 4.6A1 1 0 0 0 8 5.5z" />
+    </svg>
+  );
+}
+
+export function IconSearch({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <circle cx="11" cy="11" r="6.5" />
+      <line x1="16" y1="16" x2="20.5" y2="20.5" />
+    </svg>
+  );
+}
+
+export function IconCamera({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.3l1.5-2.2h5.4L16.2 7h2.3A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" />
+      <circle cx="12" cy="12.8" r="3.3" />
+    </svg>
+  );
+}
+
+export function IconApple({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <path d="M12 7.5c-1.2-1-2.7-1.4-4.2-1C5.3 7.2 4 9.6 4.3 12.6c.4 4 2.9 8.4 5.6 8.4.8 0 1.4-.4 2.1-.4s1.3.4 2.1.4c2.7 0 5.2-4.4 5.6-8.4.3-3-1-5.4-3.5-6.1-1.5-.4-3 0-4.2 1z" />
+      <path d="M12 7.5c0-2 1-3.6 2.8-4.3" />
+    </svg>
+  );
+}
+
+export function IconCoffee({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <path d="M5 9h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5z" />
+      <path d="M16 10.5h1.5a2.5 2.5 0 0 1 0 5H16" />
+      <path d="M8 3.5c-.6.8-.6 1.7 0 2.5M11.5 3.5c-.6.8-.6 1.7 0 2.5" />
+      <path d="M4 21h14" />
+    </svg>
+  );
+}
+
+export function IconMoon({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z" />
+    </svg>
+  );
+}
+
+export function IconPencil({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <path d="M15.5 4.5l4 4L8 20H4v-4z" />
+      <path d="M13.5 6.5l4 4" />
+    </svg>
+  );
+}
+
+export function IconCheck({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className} strokeWidth={2.4}>
+      <polyline points="5 12.5 10 17.5 19 7" />
+    </svg>
+  );
+}
+
+export function IconTrophy({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <path d="M8 4h8v5a4 4 0 0 1-8 0z" />
+      <path d="M8 6H5a2.5 2.5 0 0 0 3 4M16 6h3a2.5 2.5 0 0 1-3 4" />
+      <path d="M12 13v4M9 20.5h6M10 17h4l.5 3.5h-5z" />
     </svg>
   );
 }

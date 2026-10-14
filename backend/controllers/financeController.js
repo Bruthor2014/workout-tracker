@@ -29,17 +29,20 @@ async function listStaffFinance(req, res) {
           AND sa.shift_date <  ($2 || '-01')::date + INTERVAL '1 month'
         GROUP BY sa.staff_id
      ),
-     pt AS (
-       -- Clientes do ginásio (subscrição ativa atribuída ao staff)
-       SELECT ms.assigned_staff_id AS staff_id, ms.member_id AS client_id
+     gym_pt AS (
+       SELECT ms.assigned_staff_id AS staff_id, COUNT(DISTINCT ms.member_id)::int AS cnt
          FROM member_subscriptions ms
          JOIN users um ON um.id = ms.member_id AND um.gym_id = $1
         WHERE ms.is_active AND ms.service_type IN ('personal_training', 'nutrition_plan')
-       UNION
-       -- Clientes externos ligados ao staff
-       SELECT ecc.coach_id AS staff_id, ecc.client_id
+        GROUP BY ms.assigned_staff_id
+     ),
+     ext_pt AS (
+       SELECT ecc.coach_id AS staff_id,
+              COUNT(*)::int AS cnt,
+              COALESCE(SUM(ecc.monthly_fee), 0) AS ext_income
          FROM external_coach_clients ecc
          JOIN users uc ON uc.id = ecc.coach_id AND uc.gym_id = $1
+        GROUP BY ecc.coach_id
      )
      SELECT u.id, u.name, u.role::text AS role, u.avatar_url,
             COALESCE(sr.base_salary, 0)      AS base_salary,
@@ -51,14 +54,18 @@ async function listStaffFinance(req, res) {
             ROUND(COALESCE(att.hours_sala, 0)::numeric, 2)      AS month_hours_sala,
             ROUND(COALESCE(att.hours_reception, 0)::numeric, 2) AS month_hours_reception,
             ROUND(COALESCE(att.hours_class, 0)::numeric, 2)     AS month_hours_class,
-            COALESCE((SELECT COUNT(DISTINCT client_id)::int FROM pt WHERE pt.staff_id = u.id), 0) AS month_pt_clients,
+            COALESCE(gym_pt.cnt, 0)  AS month_gym_clients,
+            COALESCE(ext_pt.cnt, 0)  AS month_ext_clients,
+            COALESCE(ext_pt.ext_income, 0) AS month_ext_income,
             COALESCE(att.shifts_present, 0)  AS shifts_present,
             COALESCE(att.shifts_adjusted, 0) AS shifts_adjusted,
             COALESCE(att.shifts_absent, 0)   AS shifts_absent,
             COALESCE(att.shifts_pending, 0)  AS shifts_pending
        FROM users u
        LEFT JOIN staff_rates sr ON sr.staff_id = u.id AND sr.gym_id = $1
-       LEFT JOIN att ON att.staff_id = u.id
+       LEFT JOIN att     ON att.staff_id     = u.id
+       LEFT JOIN gym_pt  ON gym_pt.staff_id  = u.id
+       LEFT JOIN ext_pt  ON ext_pt.staff_id  = u.id
       WHERE u.gym_id = $1 AND u.role::text IN ('personal_trainer','nutritionist','receptionist','intern')
       ORDER BY u.name`,
     [req.user.gymId, month]
@@ -166,7 +173,7 @@ async function getMyFinance(req, res) {
   const monthParam = req.query.month;
   const monthStart = monthParam ? `${monthParam}-01` : null;
 
-  const [ratesRow, weeksRow, absRow] = await Promise.all([
+  const [ratesRow, weeksRow, absRow, extClientsRow] = await Promise.all([
     pool.query(
       `SELECT COALESCE(base_salary,0) AS base_salary,
               COALESCE(rate_reception_h,0) AS rate_reception_h,
@@ -222,12 +229,23 @@ async function getMyFinance(req, res) {
         ORDER BY d.shift_date, d.start_time`,
       [req.user.id, req.user.gymId, monthStart]
     ),
+    // Clientes externos com o valor mensal definido pelo PT
+    pool.query(
+      `SELECT ecc.id, ecc.client_id, u.name AS client_name, u.email AS client_email,
+              ecc.monthly_fee, ecc.created_at
+         FROM external_coach_clients ecc
+         JOIN users u ON u.id = ecc.client_id
+        WHERE ecc.coach_id=$1 AND ecc.gym_id=$2
+        ORDER BY u.name`,
+      [req.user.id, req.user.gymId]
+    ),
   ]);
 
   res.json({
     rates: ratesRow.rows[0] || null,
     weeks: weeksRow.rows,
     attendance: absRow.rows,
+    external_clients: extClientsRow.rows,
   });
 }
 
@@ -294,6 +312,21 @@ async function deletePayment(req, res) {
   res.status(204).send();
 }
 
+// PUT /api/finance/my/ext-client/:eccId/fee — PT define o valor mensal de um cliente externo.
+async function updateExtClientFee(req, res) {
+  const eccId = Number(req.params.eccId);
+  const fee = Number(req.body.monthly_fee);
+  if (isNaN(fee) || fee < 0) return res.status(400).json({ message: "Valor inválido." });
+
+  const result = await pool.query(
+    `UPDATE external_coach_clients SET monthly_fee=$1
+      WHERE id=$2 AND coach_id=$3 AND gym_id=$4 RETURNING id`,
+    [fee, eccId, req.user.id, req.user.gymId]
+  );
+  if (!result.rows[0]) return res.status(404).json({ message: "Cliente externo não encontrado." });
+  res.json({ message: "Valor atualizado." });
+}
+
 // GET /api/finance/my/payments — PT vê o historial de pagamentos recebidos.
 async function getMyPayments(req, res) {
   const result = await pool.query(
@@ -311,4 +344,5 @@ async function getMyPayments(req, res) {
 module.exports = {
   listStaffFinance, listWeeks, upsertRates, upsertWeek, confirmWeek,
   getMyFinance, listPayments, createPayment, deletePayment, getMyPayments,
+  updateExtClientFee,
 };

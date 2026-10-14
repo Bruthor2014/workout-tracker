@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import GlassCard from "./GlassCard";
 import Modal from "./Modal";
+import Select from "./Select";
 import { apiRequest } from "../api/client";
 
 const AUDIENCE_OPTIONS = [
@@ -87,18 +88,7 @@ export default function BroadcastModal({ onClose, onSent, memberIds }) {
                 <label className="field-label" htmlFor="audience">
                   Público
                 </label>
-                <select
-                  id="audience"
-                  className="glass-input"
-                  value={audience}
-                  onChange={(e) => setAudience(e.target.value)}
-                >
-                  {AUDIENCE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                <Select id="audience" value={audience} onChange={setAudience} options={AUDIENCE_OPTIONS} ariaLabel="Público" />
               </div>
             )}
 

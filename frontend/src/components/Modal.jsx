@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 // descendentes fixed, confinando o overlay à caixa desse antepassado em vez
 // do viewport) — um portal evita este problema seja qual for o sítio a
 // partir de onde o Modal é aberto.
-export default function Modal({ onClose, children }) {
+export default function Modal({ onClose, children, className = "" }) {
   useEffect(() => {
     function handleKey(e) {
       if (e.key === "Escape") onClose();
@@ -20,7 +20,7 @@ export default function Modal({ onClose, children }) {
 
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className={`modal-content ${className}`} onClick={(e) => e.stopPropagation()}>
         {children}
       </div>
     </div>,

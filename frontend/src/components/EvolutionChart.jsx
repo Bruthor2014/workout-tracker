@@ -17,22 +17,21 @@ export default function EvolutionChart({ data, unit }) {
   const plotWidth = WIDTH - PADDING.left - PADDING.right;
   const plotHeight = HEIGHT - PADDING.top - PADDING.bottom;
 
-  // Com um único ponto não há "linha do tempo" para percorrer — centra-se
-  // horizontalmente, em vez de ficar encostado à margem esquerda (o que
-  // cortava a etiqueta do valor, alinhada a partir daí).
+  // Com um único registo não há evolução para mostrar, mas um ponto solto
+  // fica feio: desenha-se uma linha de base tracejada ao nível desse valor
+  // (a meio do gráfico), com o ponto na ponta direita e uma nota por baixo.
+  const single = data.length === 1;
   const points = data.map((d, i) => ({
-    x: PADDING.left + (data.length === 1 ? plotWidth / 2 : (i / (data.length - 1)) * plotWidth),
-    y: PADDING.top + plotHeight - ((d.value - min) / range) * plotHeight,
+    x: PADDING.left + (single ? plotWidth : (i / (data.length - 1)) * plotWidth),
+    y: single ? PADDING.top + plotHeight / 2 : PADDING.top + plotHeight - ((d.value - min) / range) * plotHeight,
     value: d.value,
     date: d.date,
   }));
+  const linePoints = single ? [{ x: PADDING.left, y: points[0].y }, points[0]] : points;
 
-  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+  const linePath = linePoints.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
   const baseline = HEIGHT - PADDING.bottom;
-  const areaPath =
-    points.length > 1
-      ? `${linePath} L ${points[points.length - 1].x} ${baseline} L ${points[0].x} ${baseline} Z`
-      : "";
+  const areaPath = `${linePath} L ${linePoints[linePoints.length - 1].x} ${baseline} L ${linePoints[0].x} ${baseline} Z`;
   const last = points[points.length - 1];
   const hoveredPoint = hovered != null ? points[hovered] : null;
 
@@ -55,8 +54,8 @@ export default function EvolutionChart({ data, unit }) {
           />
         ))}
 
-        {areaPath && <path d={areaPath} className="chart-area" />}
-        {points.length > 1 && <path d={linePath} className="chart-line" />}
+        <path d={areaPath} className="chart-area" />
+        <path d={linePath} className={`chart-line${single ? " chart-line-baseline" : ""}`} />
 
         {hoveredPoint && (
           <line
@@ -85,15 +84,12 @@ export default function EvolutionChart({ data, unit }) {
           />
         ))}
 
-        <text
-          x={last.x}
-          y={last.y - 12}
-          textAnchor={points.length === 1 ? "middle" : "end"}
-          className="chart-label"
-        >
+        <text x={last.x} y={last.y - 12} textAnchor="end" className="chart-label">
           {last.value} {unit}
         </text>
       </svg>
+
+      {single && <p className="chart-hint">Primeiro registo — o gráfico ganha forma com o próximo.</p>}
 
       {hoveredPoint && (
         <div

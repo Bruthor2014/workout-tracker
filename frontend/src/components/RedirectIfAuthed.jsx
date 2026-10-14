@@ -8,9 +8,10 @@ import { useAuth } from "../context/AuthContext";
 // porque isto reage ao estado a mudar; um navigate() manual a seguir a
 // login() entraria em corrida com este redirect e perderia.
 export default function RedirectIfAuthed({ to = "/dashboard", children }) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   if (token) {
-    return <Navigate to={to} replace />;
+    const dest = user?.role === "dono" ? "/dono" : user?.role === "gym_owner" ? "/management" : to;
+    return <Navigate to={dest} replace />;
   }
   return children;
 }

@@ -5,6 +5,7 @@ import NutritionPlanCard from "../components/NutritionPlanCard";
 import NewNutritionPlanForm from "../components/NewNutritionPlanForm";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { IconApple } from "../components/Icons";
 
 function NutritionMarketingView() {
   return (
@@ -44,9 +45,14 @@ function NutritionAuthedView() {
   }, []);
 
   return (
-    <div className="page-container">
+    <div className="page-container nutrition-page">
       <div className="page-header">
-        <h1>Planos de Nutrição</h1>
+        <div className="log-header">
+          <span className="log-header-icon">
+            <IconApple size={22} />
+          </span>
+          <h1>Planos de Nutrição</h1>
+        </div>
         {!showForm && (
           <button className="glass-button" onClick={() => setShowForm(true)}>
             + Novo plano
@@ -74,7 +80,7 @@ function NutritionAuthedView() {
         </GlassCard>
       )}
 
-      <div className="session-grid">
+      <div className="plan-list">
         {plans.map((plan) => (
           <NutritionPlanCard key={plan.id} plan={plan} editable onChanged={loadPlans} />
         ))}

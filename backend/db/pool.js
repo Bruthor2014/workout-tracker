@@ -16,6 +16,9 @@ const pool = new Pool({
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
+  max: 20,                   // max simultaneous connections
+  idleTimeoutMillis: 30000,  // close idle connections after 30 s
+  connectionTimeoutMillis: 3000, // fail fast if pool is saturated
 });
 
 module.exports = pool;

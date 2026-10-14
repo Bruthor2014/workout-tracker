@@ -27,6 +27,7 @@ export default function Sidebar() {
   const [unreadCount, setUnreadCount] = useState(0);
   const isOwner = user?.role === "gym_owner";
   const isDono = user?.role === "dono";
+  const isReceptionist = user?.role === "receptionist";
 
   useEffect(() => {
     if (!user) return;
@@ -44,7 +45,7 @@ export default function Sidebar() {
 
   return (
     <aside className="sidebar glass">
-      <NavLink to={isDono ? "/dono" : isOwner ? "/management" : "/dashboard"} className="sidebar-brand">
+      <NavLink to={isDono ? "/dono" : isOwner ? "/management" : isReceptionist ? "/classes" : "/dashboard"} className="sidebar-brand">
         <IconLogoMark size={24} />
         Workout Tracker
       </NavLink>
@@ -102,6 +103,36 @@ export default function Sidebar() {
               <span className="sidebar-link-icon">
                 <IconMessage size={24} />
               </span>
+              Mensagens
+              {unreadCount > 0 && <span className="sidebar-badge">{unreadCount}</span>}
+            </NavLink>
+          </>
+        ) : isReceptionist ? (
+          // RECECIONISTA: conta operacional sem planos de treino pessoais.
+          <>
+            <NavLink to="/classes" className={NAV_LINK_CLASS}>
+              <span className="sidebar-link-icon"><IconCalendar size={24} /></span>
+              Aulas de grupo
+            </NavLink>
+            <NavLink to="/team-schedule" className={NAV_LINK_CLASS}>
+              <span className="sidebar-link-icon"><IconClock size={24} /></span>
+              Horário da equipa
+            </NavLink>
+            <NavLink to="/staff-attendance" className={NAV_LINK_CLASS}>
+              <span className="sidebar-link-icon"><IconCheck size={24} /></span>
+              Presenças Staff
+            </NavLink>
+            <NavLink to="/occupancy" className={NAV_LINK_CLASS}>
+              <span className="sidebar-link-icon"><IconClipboard size={24} /></span>
+              Ocupação
+            </NavLink>
+            <NavLink to="/members" className={NAV_LINK_CLASS}>
+              <span className="sidebar-link-icon"><IconUsers size={24} /></span>
+              Membros
+            </NavLink>
+            <div className="sidebar-divider" />
+            <NavLink to="/messages" className={NAV_LINK_CLASS}>
+              <span className="sidebar-link-icon"><IconMessage size={24} /></span>
               Mensagens
               {unreadCount > 0 && <span className="sidebar-badge">{unreadCount}</span>}
             </NavLink>
@@ -183,34 +214,6 @@ export default function Sidebar() {
                   </span>
                   Membros
                 </NavLink>
-                {user.role === "receptionist" && (
-                  <>
-                    <NavLink to="/classes" className={NAV_LINK_CLASS}>
-                      <span className="sidebar-link-icon">
-                        <IconCalendar size={24} />
-                      </span>
-                      Aulas de grupo
-                    </NavLink>
-                    <NavLink to="/team-schedule" className={NAV_LINK_CLASS}>
-                      <span className="sidebar-link-icon">
-                        <IconClock size={24} />
-                      </span>
-                      Horário da equipa
-                    </NavLink>
-                    <NavLink to="/occupancy" className={NAV_LINK_CLASS}>
-                      <span className="sidebar-link-icon">
-                        <IconClipboard size={24} />
-                      </span>
-                      Ocupação
-                    </NavLink>
-                    <NavLink to="/staff-attendance" className={NAV_LINK_CLASS}>
-                      <span className="sidebar-link-icon">
-                        <IconCheck size={24} />
-                      </span>
-                      Presenças Staff
-                    </NavLink>
-                  </>
-                )}
               </>
             )}
           </>

@@ -5,6 +5,7 @@ import NewPlanForm from "../components/NewPlanForm";
 import PlanCard from "../components/PlanCard";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { IconCalendar } from "../components/Icons";
 
 const PLAN_EXAMPLE = [
   { name: "Supino Plano", sets: 4, reps: 8, load: "70 kg" },
@@ -73,9 +74,14 @@ function PlansAuthedView() {
   }, []);
 
   return (
-    <div className="page-container">
+    <div className="page-container plans-page">
       <div className="page-header">
-        <h1>Planos de Treino</h1>
+        <div className="log-header">
+          <span className="log-header-icon">
+            <IconCalendar size={22} />
+          </span>
+          <h1>Planos de Treino</h1>
+        </div>
         {!showForm && (
           <button className="glass-button" onClick={() => setShowForm(true)}>
             + Novo plano
@@ -104,9 +110,9 @@ function PlansAuthedView() {
         </GlassCard>
       )}
 
-      <div className="session-grid">
+      <div className="plan-list">
         {plans.map((plan) => (
-          <PlanCard key={plan.id} plan={plan} exercises={exercises} editable onChanged={loadPlans} />
+          <PlanCard key={plan.id} plan={plan} exercises={exercises} editable canStart onChanged={loadPlans} />
         ))}
       </div>
     </div>

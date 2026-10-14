@@ -3,3 +3,5 @@ node_modules
 *.log
 uploads/avatars/*
 !uploads/avatars/.gitkeep
+uploads/foods/*
+!uploads/foods/.gitkeep

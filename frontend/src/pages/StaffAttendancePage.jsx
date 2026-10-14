@@ -33,6 +33,99 @@ function fmtHour(min) {
   return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
 }
 
+// ─── Modal de confirmação de aula de grupo ─────────────────────────────────
+function ClassConfirmModal({ shift, date, user, onClose, onSaved }) {
+  const isInstructor = shift.staff_id === user?.id;
+  const isReception  = user?.role === "receptionist" || user?.role === "gym_owner";
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState("");
+
+  const canConfirmAsInstructor = isInstructor && !shift.instructor_confirmed;
+  const canConfirmAsReception  = isReception  && !shift.reception_confirmed;
+  const canUnconfirmReception  = isReception  && shift.reception_confirmed;
+
+  async function confirm() {
+    setSaving(true); setError("");
+    try {
+      await apiRequest(`/classes/${shift.class_id}/occurrence`, { method: "POST", body: { class_date: date } });
+      onSaved(); onClose();
+    } catch (err) { setError(err.message); setSaving(false); }
+  }
+
+  async function unconfirm() {
+    setSaving(true); setError("");
+    try {
+      await apiRequest(`/classes/${shift.class_id}/occurrence`, { method: "DELETE", body: { class_date: date } });
+      onSaved(); onClose();
+    } catch (err) { setError(err.message); setSaving(false); }
+  }
+
+  async function cancelOccurrence() {
+    if (!window.confirm("Cancelar esta aula? Os inscritos serão avisados por mensagem.")) return;
+    setSaving(true); setError("");
+    try {
+      await apiRequest(`/classes/${shift.class_id}/cancel-occurrence`, { method: "POST", body: { class_date: date } });
+      onSaved(); onClose();
+    } catch (err) { setError(err.message); setSaving(false); }
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <GlassCard className="preview-card" strong style={{ maxWidth: 420, width: "100%" }}>
+        <h3 style={{ marginBottom: 4 }}>Aula de grupo</h3>
+        <p style={{ fontWeight: 600, fontSize: "1rem", margin: "0 0 2px" }}>{shift.class_title}</p>
+        <p className="text-secondary" style={{ fontSize: "0.83rem", margin: "0 0 16px" }}>
+          {shift.shift_start}–{shift.shift_end} · {shift.staff_name}
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: "1rem", color: shift.instructor_confirmed ? "#4ade80" : "var(--text-secondary)" }}>
+              {shift.instructor_confirmed ? "✓" : "○"}
+            </span>
+            <span style={{ fontSize: "0.88rem" }}>PT confirmou que deu a aula</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: "1rem", color: shift.reception_confirmed ? "#4ade80" : "var(--text-secondary)" }}>
+              {shift.reception_confirmed ? "✓" : "○"}
+            </span>
+            <span style={{ fontSize: "0.88rem" }}>Receção confirmou</span>
+          </div>
+        </div>
+
+        {shift.instructor_confirmed && shift.reception_confirmed && (
+          <div style={{ padding: "8px 12px", borderRadius: 8, background: "rgba(74,222,128,0.1)",
+            fontSize: "0.85rem", color: "#4ade80", marginBottom: 12 }}>
+            ✓ Aula confirmada — conta para o salário do PT
+          </div>
+        )}
+
+        {error && <p className="error-text">{error}</p>}
+
+        <div className="form-actions" style={{ marginTop: 8, flexWrap: "wrap", gap: 8 }}>
+          <button type="button" className="glass-button glass-button-secondary" onClick={onClose}>Fechar</button>
+          {isReception && (
+            <button type="button" className="nf-text-danger" style={{ marginRight: "auto", fontSize: "0.82rem" }}
+              disabled={saving} onClick={cancelOccurrence}>
+              Cancelar aula
+            </button>
+          )}
+          {canUnconfirmReception && (
+            <button type="button" className="glass-button glass-button-secondary" disabled={saving} onClick={unconfirm}>
+              Retirar confirmação
+            </button>
+          )}
+          {(canConfirmAsInstructor || canConfirmAsReception) && (
+            <button type="button" className="glass-button" disabled={saving} onClick={confirm}>
+              {saving ? "A confirmar..." : isInstructor ? "Confirmar que dei a aula" : "Confirmar da receção"}
+            </button>
+          )}
+        </div>
+      </GlassCard>
+    </Modal>
+  );
+}
+
 // ─── Modal de ajuste de presença ───────────────────────────────────────────
 function AdjustModal({ shift, date, onClose, onSaved }) {
   const fullMins = toMin(shift.shift_end) - toMin(shift.shift_start);
@@ -179,6 +272,17 @@ function DayTimetable({ shifts, isToday, onShiftClick }) {
   const hours = [];
   for (let m = rangeStart; m <= rangeEnd; m += 60) hours.push(m);
 
+  const classBg = (shift) => {
+    if (shift.instructor_confirmed && shift.reception_confirmed) return "rgba(74,222,128,0.25)";
+    if (shift.instructor_confirmed || shift.reception_confirmed) return "rgba(245,158,11,0.20)";
+    return "rgba(139,92,246,0.15)";
+  };
+  const classBorder = (shift) => {
+    if (shift.instructor_confirmed && shift.reception_confirmed) return "rgba(74,222,128,0.6)";
+    if (shift.instructor_confirmed || shift.reception_confirmed) return "rgba(245,158,11,0.6)";
+    return "rgba(139,92,246,0.5)";
+  };
+
   const statusBg = (s) => ({
     present:  "rgba(74,222,128,0.25)",
     adjusted: "rgba(245,158,11,0.25)",
@@ -248,6 +352,35 @@ function DayTimetable({ shifts, isToday, onShiftClick }) {
                   }} />
                 ))}
                 {/* Shift bar */}
+                {shift.source === "class" ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: startPct, width: widthPct,
+                      top: 2, bottom: 2,
+                      background: classBg(shift),
+                      border: `1.5px solid ${classBorder(shift)}`,
+                      borderRadius: 8,
+                      cursor: isToday ? "pointer" : "default",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      gap: 6, padding: "0 8px", overflow: "hidden",
+                    }}
+                    onClick={() => isToday && onShiftClick(shift)}
+                    title={`${shift.class_title} · ${shift.shift_start}–${shift.shift_end}`}
+                  >
+                    <span style={{ fontSize: "0.72rem", color: "#a78bfa", flexShrink: 0 }}>Aula</span>
+                    <span style={{ fontSize: "0.78rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {shift.class_title}
+                    </span>
+                    <span style={{ fontSize: "0.7rem", flexShrink: 0,
+                      color: shift.instructor_confirmed && shift.reception_confirmed ? "#4ade80" : "var(--text-secondary)" }}>
+                      {shift.instructor_confirmed && shift.reception_confirmed ? "✓✓"
+                        : shift.instructor_confirmed ? "PT✓"
+                        : shift.reception_confirmed  ? "Rec✓"
+                        : "?"}
+                    </span>
+                  </div>
+                ) : (
                 <div
                   style={{
                     position: "absolute",
@@ -278,6 +411,7 @@ function DayTimetable({ shifts, isToday, onShiftClick }) {
                     </span>
                   )}
                 </div>
+                )}
               </div>
             </div>
           );
@@ -306,6 +440,7 @@ export default function StaffAttendancePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [adjusting, setAdjusting] = useState(null);
+  const [confirmingClass, setConfirmingClass] = useState(null);
 
   function loadShifts(d) {
     setLoading(true); setError("");
@@ -315,7 +450,13 @@ export default function StaffAttendancePage() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { loadShifts(date); }, [date]);
+  useEffect(() => {
+    loadShifts(date);
+    // Trigger auto-cancel check when viewing today
+    if (date === TODAY_SV && (isOwner || user?.role === "receptionist")) {
+      apiRequest("/classes/auto-cancel", { method: "POST" }).catch(() => {});
+    }
+  }, [date, isOwner, user?.role]);
 
   const isToday = date === TODAY_SV;
   const isEditable = isOwner || isToday;
@@ -369,7 +510,7 @@ export default function StaffAttendancePage() {
         <DayTimetable
           shifts={shifts}
           isToday={isEditable}
-          onShiftClick={setAdjusting}
+          onShiftClick={(s) => s.source === "class" ? setConfirmingClass(s) : setAdjusting(s)}
         />
       )}
 
@@ -378,6 +519,16 @@ export default function StaffAttendancePage() {
           shift={adjusting}
           date={date}
           onClose={() => setAdjusting(null)}
+          onSaved={() => loadShifts(date)}
+        />
+      )}
+
+      {confirmingClass && (
+        <ClassConfirmModal
+          shift={confirmingClass}
+          date={date}
+          user={user}
+          onClose={() => setConfirmingClass(null)}
           onSaved={() => loadShifts(date)}
         />
       )}

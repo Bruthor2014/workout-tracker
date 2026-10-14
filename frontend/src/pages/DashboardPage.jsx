@@ -3,12 +3,35 @@ import { Link } from "react-router-dom";
 import GlassCard from "../components/GlassCard";
 import WeekCalendar from "../components/WeekCalendar";
 import WeeklyComparison from "../components/WeeklyComparison";
-import { IconDumbbell, IconChevronRight, IconPlusCircle, IconCalendar, IconFilter, IconRefresh } from "../components/Icons";
+import {
+  IconDumbbell,
+  IconChevronRight,
+  IconPlusCircle,
+  IconCalendar,
+  IconClock,
+  IconTrash,
+  IconWeightStack,
+} from "../components/Icons";
 import { apiRequest } from "../api/client";
+import { workoutVisual } from "../utils/muscleGroups";
+import { addDays, startOfWeek, toDateKey } from "../utils/date";
 
-// Cor do traço à esquerda de cada linha do histórico — só decorativo, cicla
-// pela lista para dar alguma variedade visual.
-const ROW_ACCENTS = ["#a78bfa", "#60a5fa", "#34d399", "#fb923c", "#f472b6"];
+const WEEKDAY_NAMES = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+
+const MONTH_LABELS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+// "2026-10-03" -> "3 out 2026". "T00:00:00" força o parsing em hora local,
+// não UTC — evita que a data mude de dia consoante o fuso do browser.
+function formatDate(dateKey) {
+  const d = new Date(`${dateKey}T00:00:00`);
+  return `${d.getDate()} ${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// "2026-10-03" -> "Sábado, 3 out"
+function formatDayTitle(dateKey) {
+  const d = new Date(`${dateKey}T00:00:00`);
+  return `${WEEKDAY_NAMES[d.getDay()]}, ${d.getDate()} ${MONTH_LABELS[d.getMonth()]}`;
+}
 
 function formatDuration(startedAt, endedAt) {
   if (!startedAt || !endedAt) return null;
@@ -19,41 +42,47 @@ function formatDuration(startedAt, endedAt) {
   return m ? `${h}h ${m}min` : `${h}h`;
 }
 
+// Mostra a semana escolhida no calendário (por omissão a atual) e, por
+// baixo, só os treinos do dia escolhido (por omissão hoje). As setas do
+// calendário mudam de semana; clicar num dia mostra os treinos desse dia.
 export default function DashboardPage() {
-  const [sessions, setSessions] = useState([]);
+  const todayKey = toDateKey(new Date());
+  const currentWeekStart = startOfWeek(new Date());
+  const [weekStart, setWeekStart] = useState(currentWeekStart);
+  const [selectedKey, setSelectedKey] = useState(todayKey);
+  const [sessions, setSessions] = useState([]); // treinos da semana mostrada
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
 
-  function loadSessions() {
+  const weekStartKey = toDateKey(weekStart);
+  useEffect(() => {
+    let cancelled = false;
+    const from = weekStartKey;
+    const to = toDateKey(addDays(new Date(`${weekStartKey}T00:00:00`), 6));
+    apiRequest(`/sessions?from=${from}&to=${to}`)
+      .then((rows) => {
+        if (!cancelled) setSessions(rows);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [weekStartKey]);
+
+  // Mudar de semana escolhe a segunda-feira dessa semana (ou hoje, se for a
+  // semana atual).
+  function changeWeek(offsetWeeks) {
+    const next = addDays(weekStart, offsetWeeks * 7);
     setLoading(true);
     setError("");
-    const params = new URLSearchParams();
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
-    const query = params.toString() ? `?${params.toString()}` : "";
-
-    apiRequest(`/sessions${query}`)
-      .then(setSessions)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }
-
-  useEffect(() => {
-    loadSessions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function handleFilterSubmit(e) {
-    e.preventDefault();
-    loadSessions();
-  }
-
-  function clearFilter() {
-    setFrom("");
-    setTo("");
-    setTimeout(loadSessions, 0);
+    setWeekStart(next);
+    const nextKey = toDateKey(next);
+    setSelectedKey(nextKey === toDateKey(currentWeekStart) ? todayKey : nextKey);
   }
 
   async function handleDelete(e, sessionId) {
@@ -70,9 +99,17 @@ export default function DashboardPage() {
     }
   }
 
-  // Sem filtro de datas ativo, `sessions` já cobre a semana atual — usa-se
-  // essa lista para marcar os dias em que houve treino.
-  const attendedDates = useMemo(() => new Set(sessions.map((s) => s.performed_at)), [sessions]);
+  // Dias com treino na semana (e com que figura — com dois treinos no mesmo
+  // dia, usa-se o primeiro da lista).
+  const workoutsByDate = useMemo(() => {
+    const map = new Map();
+    for (const s of sessions) {
+      if (!map.has(s.performed_at)) map.set(s.performed_at, s.muscle_groups);
+    }
+    return map;
+  }, [sessions]);
+
+  const daySessions = sessions.filter((s) => s.performed_at === selectedKey);
 
   return (
     <div className="page-container">
@@ -84,64 +121,60 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      <WeekCalendar attendedDates={attendedDates} />
+      <WeekCalendar
+        weekStart={weekStart}
+        selectedKey={selectedKey}
+        workoutsByDate={workoutsByDate}
+        onSelect={setSelectedKey}
+        onPrevWeek={() => changeWeek(-1)}
+        onNextWeek={() => changeWeek(1)}
+        canGoNext={weekStart < currentWeekStart}
+      />
       <WeeklyComparison />
 
-      <form className="filter-bar glass" onSubmit={handleFilterSubmit}>
-        <span className="filter-bar-icon">
-          <IconCalendar size={18} />
-        </span>
-
-        <div className="filter-bar-field">
-          <label className="filter-bar-label" htmlFor="from">
-            De
-          </label>
-          <input id="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-        </div>
-
-        <div className="filter-bar-field">
-          <label className="filter-bar-label" htmlFor="to">
-            Até
-          </label>
-          <input id="to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-        </div>
-
-        <span className="filter-bar-divider" />
-
-        <div className="filter-bar-actions">
-          <button type="submit" className="glass-button filter-bar-btn">
-            <IconFilter size={16} />
-            Filtrar
-          </button>
-          <button type="button" className="glass-button glass-button-secondary filter-bar-btn" onClick={clearFilter}>
-            <IconRefresh size={16} />
-            Limpar
-          </button>
-        </div>
-      </form>
+      <div className="day-header">
+        <h2>
+          <IconCalendar size={22} />
+          {formatDayTitle(selectedKey)}
+          {selectedKey === todayKey && <span className="day-header-today">Hoje</span>}
+        </h2>
+        {!loading && (
+          <span className="text-secondary">
+            {daySessions.length === 0
+              ? "Sem treinos"
+              : `${daySessions.length} ${daySessions.length === 1 ? "treino" : "treinos"}`}
+          </span>
+        )}
+      </div>
 
       {loading && <p className="text-secondary">A carregar...</p>}
       {error && <p className="error-text">{error}</p>}
 
-      {!loading && !error && sessions.length === 0 && (
+      {!loading && !error && daySessions.length === 0 && (
         <GlassCard className="empty-state">
-          <p>Não há treinos para mostrar.</p>
-          <Link to="/log" className="glass-button" style={{ display: "inline-block", marginTop: 12 }}>
-            Registar treino
-          </Link>
+          {selectedKey > todayKey ? (
+            <p>Este dia ainda não chegou.</p>
+          ) : (
+            <>
+              <p>Não há treinos neste dia.</p>
+              <Link to={`/log?date=${selectedKey}`} className="glass-button" style={{ display: "inline-block", marginTop: 12 }}>
+                Registar treino
+              </Link>
+            </>
+          )}
         </GlassCard>
       )}
 
       <div className="workout-list">
-        {sessions.map((session, i) => {
+        {daySessions.map((session) => {
           const duration = formatDuration(session.started_at, session.ended_at);
-          const totalWeight = Number(session.total_weight_kg);
-          const accent = ROW_ACCENTS[i % ROW_ACCENTS.length];
+          const totalWeight = Math.round(Number(session.total_weight_kg));
+          const { icon: WorkoutIcon, color } = workoutVisual(session.muscle_groups);
           return (
             <Link to={`/log/${session.id}`} key={session.id} className="session-card-link">
-              <GlassCard className="workout-row" style={{ "--row-accent": accent }}>
+              <GlassCard className="workout-row" style={{ "--row-accent": color }}>
                 <span className="workout-row-icon">
-                  <IconDumbbell size={20} />
+                  <WorkoutIcon size={40} />
                 </span>
 
                 <div className="workout-row-info">
@@ -153,24 +186,42 @@ export default function DashboardPage() {
 
                 <div className="workout-row-meta">
                   <span className="workout-row-meta-item">
-                    {/* "T00:00:00" força o parsing em hora local, não UTC — evita
-                        que a data mude de dia consoante o fuso horário do browser. */}
-                    {new Date(`${session.performed_at}T00:00:00`).toLocaleDateString("pt-PT")}
+                    <IconCalendar size={17} />
+                    {formatDate(session.performed_at)}
                   </span>
-                  {duration && <span className="workout-row-meta-item">{duration}</span>}
-                  {totalWeight > 0 && <span className="workout-row-meta-item">{totalWeight} kg</span>}
-                  <span className="workout-row-meta-item">{session.exercise_count ?? 0} exercícios</span>
+                  <span className="workout-row-meta-item">
+                    {duration && (
+                      <>
+                        <IconClock size={17} />
+                        {duration}
+                      </>
+                    )}
+                  </span>
+                  <span className="workout-row-meta-item">
+                    {totalWeight > 0 && (
+                      <>
+                        <IconWeightStack size={17} />
+                        {totalWeight.toLocaleString("pt-PT")} kg
+                      </>
+                    )}
+                  </span>
+                  <span className="workout-row-meta-item">
+                    <IconDumbbell size={17} />
+                    {session.exercise_count ?? 0} exercícios
+                  </span>
                 </div>
 
                 <div className="workout-row-actions">
                   <button
                     type="button"
-                    className="glass-button glass-button-secondary session-delete"
+                    className="workout-row-delete"
                     onClick={(e) => handleDelete(e, session.id)}
+                    title="Eliminar treino"
+                    aria-label="Eliminar treino"
                   >
-                    Eliminar
+                    <IconTrash size={17} />
                   </button>
-                  <span className="glass-button glass-button-secondary workout-row-view">
+                  <span className="workout-row-view">
                     Ver detalhes
                     <IconChevronRight size={14} />
                   </span>
