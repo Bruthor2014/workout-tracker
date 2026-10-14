@@ -1,127 +1,142 @@
 WORKOUT TRACKER — ESTADO DO PROJETO
-Última atualização: 2026-10-03
+Última atualização: 2026-10-14
 
 Este ficheiro existe para continuidade entre máquinas/sessões — a conversa
-com o Claude e a memória local dele ficam presas a este computador. Isto
-viaja com o projeto (git).
+com o Claude e a memória local dele ficam presas a cada computador. Isto
+viaja com o projeto (git). NOTA IMPORTANTE: este projeto já foi trabalhado
+em duas máquinas diferentes, por duas sessões de Claude Code separadas sem
+contacto entre si. A partir de 2026-10-14 ficaram sincronizadas (git pull
+limpo, sem conflitos) — mas cada sessão só conhece em detalhe o que ela
+própria construiu. Lê isto todo antes de assumir o que existe ou não.
 
 ======================================================================
-JÁ FEITO
-======================================================================
-
 STACK E BASE
+======================================================================
 - Backend: Node.js + Express 5, PostgreSQL (SQL direto via `pg`, sem ORM)
-- Frontend: React 19 + Vite, React Router 7
+- Frontend: React 19 + Vite, React Router 7 (lazy-loaded por página)
 - Auth: JWT + bcrypt, role-based access control
 - Projeto no GitHub: https://github.com/Bruthor2014/workout-tracker
-  (README já escrito e atualizado lá)
 
-FUNCIONALIDADES PRINCIPAIS
-- Planos de treino multi-dia, planos de nutrição (refeição -> opção -> itens)
-- Composição corporal (peso, gordura, massa magra/muscular/óssea, água) com
-  gráficos de evolução
-- Treinos em direto (cronómetro) ou manuais, com duração
-- Dashboard: calendário semanal, estatísticas reais (treinos esta semana,
-  volume, streak, progresso mensal por semanas)
-- Gestão de membros (staff): pesquisa, filtro de inativos, perfil completo
-- Mensagens diretas + mensagens globais/segmentadas com placeholder {nome}
-- Subscrições por membro: personal_training, nutrition_plan, gym_membership
-  (cada uma ativa/inativa, com staff atribuído quando aplicável)
+======================================================================
+ROLES (importante — já mudou duas vezes)
+======================================================================
+- `member`            — utilizador normal, treina
+- `personal_trainer`, `nutritionist` — staff especializado
+- `receptionist`       — gestão do dia-a-dia (presenças, membros)
+- `intern`             — staff em formação (pouca funcionalidade própria)
+- `gym_owner`          — "CEO": gere UM ginásio (equipa, finanças, horários,
+                          tema). Conta de gestão — NÃO tem treinos/planos
+                          próprios (bloqueado por middleware `notOwner`).
+- `dono`               — dono da PLATAFORMA (não de um ginásio específico).
+                          Mais recente, pouco testado ainda.
+- `admin`              — reservado, ainda sem uso real (pode ter sido
+                          substituído pelo conceito de `dono` — verificar).
 
-ROLES (importante — mudou a meio do projeto)
-- `admin`   = reservado para administração da PLATAFORMA (ainda sem
-              funcionalidade construída, só reservado)
-- `gym_owner` = quem gere UM ginásio (isto é o que "admin" costumava
-              significar neste projeto antes da separação)
-- `personal_trainer`, `nutritionist`, `receptionist`, `intern`, `member`
-- gym_owner pode: repor password de um membro, mudar o role de alguém do
-  seu ginásio (promover a staff), gerir subscrições
-- rececionista também gere subscrições, mas NÃO passwords/roles (mais
-  sensível, só gym_owner)
+gym_id em `users` já é NULLABLE (clientes externos/dono não pertencem a
+nenhum ginásio) — isto era a "Fase A" que estava planeada, já foi feita.
 
-REDESIGN VISUAL (feito recentemente, site inteiro)
-- Saiu do estilo "glass" muito desfocado para um visual mais escuro/plano,
-  com cartões sólidos e cor por elemento (não tudo roxo igual)
-- Sidebar com ícone colorido por item + badge real de mensagens por ler
-- Logótipo novo (pulso/check em gradiente roxo->magenta)
-- Dashboard ("Os teus treinos"): cartões de dia da semana coloridos,
-  4 estatísticas reais (não decorativas), lista de treinos em linhas com
-  cor + grupo muscular
-- Barra de filtro (De/Até) redesenhada para bater certo com uma imagem de
-  referência que o utilizador mostrou
+======================================================================
+FUNCIONALIDADES — o que existe hoje (alto nível; há MUITO mais detalhe no
+código do que cabe aqui, sobretudo no bloco construído em 2026-10-14)
+======================================================================
 
-EXERCÍCIOS
-- Catálogo expandido de 3 para 35 exercícios, em 8 grupos musculares
-  (Peito, Costas, Pernas, Ombros, Bíceps, Tríceps, Abdominais, Glúteos)
-- Seletor de exercícios novo (ExercisePicker.jsx): pesquisa + filtro por
-  grupo muscular, com imagem real do exercício
-- Imagens trocadas da wger.de (estilos/formatos misturados, algumas
-  desfocadas) para o free-exercise-db (github.com/yuhonas/free-exercise-db,
-  domínio público): fotografias reais, todas no mesmo estilo, JPG 850x567.
-  Cada exercício tem a sua própria imagem (já nenhum partilha). Guardadas
-  em `exercises.image_url`, apontam para raw.githubusercontent.com.
-- schema.sql agora cria o ginásio 1 antes do catálogo (antes falhava numa
-  BD nova por violar a foreign key gym_id).
+MEMBRO (uso pessoal)
+- Planos de treino multi-dia, planos de nutrição (refeição->opção->itens)
+- Composição corporal com gráficos de evolução
+- Treinos em direto (cronómetro) ou manuais
+- Dashboard: calendário semanal, estatísticas reais, progresso mensal
+- Seletor de exercícios com pesquisa + filtro por grupo muscular + imagem
+  real por exercício (catálogo com 100+ exercícios agora, incl. Cardio)
+- Mensagens diretas
 
-BUGS REAIS ENCONTRADOS E CORRIGIDOS
+GESTÃO DE GINÁSIO (gym_owner/"CEO") — construído numa sessão separada,
+pouco testado por mim ainda:
+- Painel "Gestão" (/management): membros, ativos/inativos, treinos da
+  semana, aulas de grupo, gráfico de treinos por semana, gestão de equipa,
+  tema de cor personalizado do ginásio (aplicado a todos os utilizadores
+  desse ginásio)
+- Membros: pesquisa, filtro de inativos, adicionar pessoa, mensagens
+  globais/segmentadas com placeholder {nome}
+- Aulas de grupo (/classes): horário semanal, aulas/palestras/eventos,
+  confirmação em duas partes (instrutor + receção), cancelamento
+  automático se faltarem inscritos, substituições
+- Horários da equipa (/team-schedule): turnos semanais, gerador automático
+  de horário, vista por pessoa ou toda a equipa
+- Ocupação (/occupancy): check-ins em tempo real
+- Financeiro (/finance ou aba "Financeiro"): salário base + taxas por
+  tipo de trabalho (receção/sala/aula) + taxa mensal por cliente de PT,
+  retenção do ginásio (% ou fixo), confirmação semanal de horas
+- Presenças da equipa (staff_attendance) — ver bug encontrado abaixo
+- Clientes externos de PT/nutricionista (fora do ginásio, via código de
+  convite — `invite_code` em users, tabela `external_coach_clients`)
+
+SUBSCRIÇÕES
+- personal_training, nutrition_plan, gym_membership — cada uma
+  ativa/inativa, com staff atribuído quando aplicável
+
+======================================================================
+BUGS REAIS ENCONTRADOS E CORRIGIDOS (cronológico, os dois blocos juntos)
+======================================================================
 - Modal (editar subscrição, etc.) aparecia confinado/transparente quando
-  aberto de dentro de um cartão com `backdrop-filter` — corrigido
-  definitivamente usando `createPortal` para `document.body` em Modal.jsx
-- GlassCard.jsx nunca aceitava a prop `style` (fazia vários ajustes de
-  espaçamento noutras páginas não terem efeito nenhum, silenciosamente)
-- `toDateKey()` (frontend/src/utils/date.js) convertia para UTC antes de
-  formatar a data — desalinhava o calendário semanal e as estatísticas em
-  qualquer fuso horário diferente de UTC+0 (ex: Portugal). Corrigido.
+  aberto de dentro de um cartão com `backdrop-filter` — corrigido com
+  `createPortal` para `document.body` em Modal.jsx
+- GlassCard.jsx não aceitava a prop `style` (ajustes de espaçamento
+  silenciosamente sem efeito nalgumas páginas)
+- `toDateKey()` convertia para UTC antes de formatar — desalinhava
+  calendário/estatísticas em fusos horários != UTC+0 (ex: Portugal)
+- JWT expira ao fim de 7 dias e a app ficava presa a mostrar "Token
+  inválido ou expirado" sem opção de recuperação — agora `apiRequest`
+  limpa a sessão e redireciona para /login automaticamente num 401
+- 2026-10-14, ao sincronizar as duas máquinas: a tabela `staff_attendance`
+  era usada por vários controllers (attendanceController, classController,
+  financeController) mas o CREATE TABLE tinha ficado só na BD viva da
+  outra máquina — nunca chegou ao schema.sql nem às migrations.
+  Reconstruída a partir do código e adicionada ao schema.sql.
+- 2026-10-14: `class_cancellations.reason` só permitia
+  ('not_enough','no_instructor') mas o cancelamento manual insere 'manual'
+  — ia rebentar com violação de constraint na primeira vez que alguém
+  cancelasse uma aula à mão. Constraint alargada.
 
 ======================================================================
-A MEIO / POR DECIDIR
+BASE DE DADOS — COMO FICAR ATUALIZADO NUMA MÁQUINA NOVA/ANTIGA
 ======================================================================
+Além do schema.sql, existem migrations incrementais em
+backend/db/migrations/001...018 — todas escritas de forma defensiva
+(IF NOT EXISTS / IF EXISTS), seguras de correr mais que uma vez ou numa
+BD que já tenha parte das alterações feitas à mão. Se abrires este
+projeto numa BD desatualizada:
 
-1. IMAGENS DOS EXERCÍCIOS — qualidade/consistência resolvida (ver acima).
-   Ainda em aberto, se se quiser: mais exercícios, ou mostrar a imagem
-   também nos cartões de plano (hoje só aparece no seletor).
+  cd backend/db/migrations
+  for f in *.sql; do
+    psql -U postgres -d workout_tracker -v ON_ERROR_STOP=1 -f "$f"
+  done
+
+Se isso falhar com "relation X does not exist", é sinal de que falta algo
+no schema.sql que só existia numa BD viva de outra máquina (já aconteceu
+uma vez com staff_attendance, acima) — procurar no código como essa tabela
+é usada e reconstruir, como fiz para staff_attendance.
 
 ======================================================================
-PRÓXIMOS PASSOS DISCUTIDOS (Fase B do sistema multi-ginásio/PT independente)
+POR FAZER / EM ABERTO
 ======================================================================
-
-Contexto: o objetivo é a app suportar vários ginásios reais, mais PTs/
-nutricionistas independentes (com alunos de dentro E de fora de um
-ginásio), não só o modelo atual (um membro só pertence a UM ginásio fixo).
-
-JÁ FEITO desta fase:
-- Separação admin/gym_owner (acima)
-- Subscrição gym_membership (acima)
-
-POR FAZER (a parte mais complexa, ainda não começada):
-- Reescrever o controlo de acesso a planos/métricas/mensagens para
-  depender da RELAÇÃO (subscrição ativa com um PT/nutricionista) em vez
-  do `gym_id` partilhado — é isto que permite um PT ter alunos fora do
-  seu ginásio, e que faz um membro perder acesso a um plano quando a
-  relação com esse PT/ginásio termina (sem apagar os dados, só deixam de
-  aparecer)
-- Aba "Os meus alunos" para o PT/nutricionista (roster independente de
-  gym_id, baseado em member_subscriptions.assigned_staff_id)
-- Vista de staff do ginásio para o gym_owner (hoje só vê membros, não vê
-  a lista dos seus PTs/nutricionistas/rececionistas)
-- Código de convite pessoal do PT (para apanhar alunos fora de um
-  ginásio) — o utilizador disse explicitamente que isto é baixa
-  prioridade, "mais à frente vemos"
-
-AINDA MAIS ADIANTE (Fase A, totalmente adiada por escolha do utilizador):
-- `gym_id` passar a opcional (membro 100% independente, sem ginásio)
-- Criar ginásio self-service (hoje só existe via inserção direta na BD)
-- Entrar/sair de um ginásio específico via código de convite
+- Esta sessão (a que escreve isto agora) ainda NÃO reviu em detalhe o
+  código novo (gymController, classController, financeController,
+  scheduleGenerator, etc.) — só fez um smoke test visual (login, Gestão,
+  Membros, Horários da equipa, Aulas de grupo — tudo a funcionar, 0 erros
+  500). Pode haver mais gaps como o do staff_attendance por descobrir.
+- O role `dono` (dono da plataforma) é muito recente — não sei que
+  funcionalidade tem por trás, nem se `admin` ainda é usado nalgum sítio.
+- Imagens dos exercícios: já não partilham imagem entre si (resolvido),
+  mas ainda não aparecem nos cartões de plano, só no seletor.
 
 ======================================================================
 CONTAS DE TESTE (password em texto simples só porque é ambiente de dev local)
 ======================================================================
-- ruben.francisco.correia2003@gmail.com — gym_owner — password: ruben123
-- joao@gmail.com    — member — password: joao123
-- jose@gmail.com    — member — password: jose123
-- carol@gmail.com   — personal_trainer (foi promovida a meio de um teste
-                       de "mudar role") — password: carol123
-- ruben.teste@example.com — personal_trainer — password: 12345678
+- ruben.francisco.correia2003@gmail.com — gym_owner ("CEO") — ruben123
+- joao@gmail.com    — member — joao123
+- jose@gmail.com    — member — jose123
+- carol@gmail.com   — personal_trainer — carol123
+- ruben.teste@example.com — personal_trainer — 12345678
 
 Base de dados local: PostgreSQL, db "workout_tracker", user postgres,
 password em backend/.env (DB_PASSWORD).
@@ -132,3 +147,6 @@ COMO CORRER O PROJETO LOCALMENTE
 Terminal 1: cd backend  && npm run dev   (porta 3000)
 Terminal 2: cd frontend && npm run dev   (porta 5173)
 Abrir http://localhost:5173
+
+Dependências novas desde a última vez: compression, express-rate-limit
+(backend) — correr `npm install` em backend/ se vindo de uma versão antiga.
