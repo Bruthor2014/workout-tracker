@@ -140,7 +140,6 @@ export default function NutritionPlanCard({ plan, editable: editableProp, onChan
               onClick={handleDelete}
               disabled={deleting}
               aria-label="Eliminar plano"
-              title="Eliminar plano"
             >
               <IconTrash size={16} />
             </button>

@@ -4,9 +4,11 @@
 
 -- Ginásios (multi-tenant desde o início)
 CREATE TABLE gyms (
-    id          SERIAL PRIMARY KEY,
-    name        VARCHAR(150) NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id              SERIAL PRIMARY KEY,
+    name            VARCHAR(150) NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    accent_color    VARCHAR(7),
+    secondary_color VARCHAR(7)
 );
 
 -- Utilizadores
@@ -18,7 +20,11 @@ CREATE TABLE gyms (
 -- separação (ver [[project_workout_tracker]] para o histórico). 'personal_trainer'
 -- cria e atribui planos de treino; 'nutritionist' idem para planos
 -- alimentares; 'intern' é staff em formação/supervisionado; 'receptionist'
--- faz registo/gestão de membros e check-ins.
+-- é uma PESSOA normal da equipa (como um PT) que faz registo/gestão de
+-- membros e check-ins — tem horário, presenças e salário como qualquer
+-- staff. 'reception_station' é DIFERENTE: é a conta do PC fixo do
+-- balcão (um posto de trabalho partilhado, não uma pessoa) — só vê
+-- Mensagens, Membros e Ocupação, sem horários/presenças/financeiro.
 CREATE TYPE user_role AS ENUM (
     'member',
     'admin',
@@ -26,7 +32,8 @@ CREATE TYPE user_role AS ENUM (
     'personal_trainer',
     'nutritionist',
     'intern',
-    'receptionist'
+    'receptionist',
+    'reception_station'
 );
 
 CREATE TABLE users (

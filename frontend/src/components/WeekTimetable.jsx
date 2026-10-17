@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { WEEKDAYS, todayWeekday, toMinutes } from "../utils/schedule";
 
 const HOUR_HEIGHT = 84; // px por hora na grelha (uma aula de 1h mostra hora, nome, responsável e etiqueta)
@@ -55,6 +56,9 @@ export default function WeekTimetable({
   clip = false,
 }) {
   const today = todayWeekday();
+  // Tooltip próprio para os blocos "dense" (em vez do title nativo do
+  // browser, que vem sempre branco e não segue o tema da app).
+  const [tooltip, setTooltip] = useState(null);
   const hourHeight = dense ? DENSE_HOUR_HEIGHT : HOUR_HEIGHT;
   const startHour = clip && items.length
     ? Math.max(0, Math.floor(Math.min(...items.map((i) => toMinutes(i.start_time))) / 60) - 1)
@@ -72,6 +76,13 @@ export default function WeekTimetable({
     const classes = ["tt-item", item.status, compact && "compact", dense && "dense", narrow && "narrow", short && "short"]
       .filter(Boolean)
       .join(" ");
+    const tooltipText = `${item.title} · ${item.subtitle || ""} · ${item.start_time}–${item.end_time}`;
+    const showTooltip = (e) => {
+      if (!dense) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      setTooltip({ text: tooltipText, top: rect.top, left: rect.left + rect.width / 2 });
+    };
+    const hideTooltip = () => dense && setTooltip(null);
     return (
       <Tag
         key={item.id}
@@ -79,7 +90,10 @@ export default function WeekTimetable({
         className={classes}
         style={{ "--item-color": item.color, ...style }}
         onClick={onItemClick ? () => onItemClick(item) : undefined}
-        title={dense ? `${item.title} · ${item.subtitle || ""} · ${item.start_time}–${item.end_time}` : undefined}
+        onMouseEnter={showTooltip}
+        onMouseLeave={hideTooltip}
+        onFocus={showTooltip}
+        onBlur={hideTooltip}
       >
         {!dense && (
           <span className="tt-item-time">
@@ -178,6 +192,12 @@ export default function WeekTimetable({
       </div>
 
       {items.length === 0 && <p className="tt-empty text-secondary">{emptyText}</p>}
+
+      {tooltip && (
+        <div className="tt-tooltip" style={{ top: tooltip.top, left: tooltip.left }}>
+          {tooltip.text}
+        </div>
+      )}
     </div>
   );
 }

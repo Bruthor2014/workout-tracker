@@ -160,7 +160,7 @@ export default function MembersPage() {
               + Adicionar pessoa
             </button>
           )}
-          {user.role === "receptionist" && (
+          {(user.role === "receptionist" || user.role === "reception_station") && (
             <button type="button" className="glass-button" onClick={() => setShowAddPerson("member")}>
               + Novo sócio
             </button>

@@ -14,7 +14,7 @@ import { apiRequest, resolveAssetUrl } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { ROLE_LABELS } from "../utils/roles";
 
-const SUBSCRIPTION_MANAGER_ROLES = ["gym_owner", "receptionist"];
+const SUBSCRIPTION_MANAGER_ROLES = ["gym_owner", "receptionist", "reception_station"];
 // Rececionistas veem a área de Membros (para gerir subscrições) mas não têm
 // acesso a treino/nutrição/composição corporal — esses continuam só para
 // quem já os geria antes.
@@ -34,6 +34,7 @@ const ASSIGNABLE_ROLES = [
   { value: "nutritionist", label: "Nutricionista" },
   { value: "receptionist", label: "Rececionista" },
   { value: "intern", label: "Estagiário" },
+  { value: "reception_station", label: "Receção" },
 ];
 
 function ChangeRoleButton({ memberId }) {

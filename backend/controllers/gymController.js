@@ -270,7 +270,7 @@ async function patchUser(req, res) {
     updates.push(`gym_id = $${params.length}`);
   }
   if (role !== undefined) {
-    const VALID_ROLES = ["member", "gym_owner", "personal_trainer", "nutritionist", "receptionist", "intern"];
+    const VALID_ROLES = ["member", "gym_owner", "personal_trainer", "nutritionist", "receptionist", "intern", "reception_station"];
     if (!VALID_ROLES.includes(role)) return res.status(400).json({ message: "Role inválido." });
     // Se estiver a atribuir gym_owner, tirar o anterior primeiro.
     if (role === "gym_owner" && gym_id) {
@@ -291,22 +291,32 @@ async function patchUser(req, res) {
   res.json(updated.rows[0]);
 }
 
-// PUT /api/gym/theme — CEO define a cor de destaque do ginásio.
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+// PUT /api/gym/theme — CEO define a cor principal e secundária do ginásio.
+// Aplicam-se a todos os utilizadores desse ginásio (fundo, sidebar, cartões).
 async function updateTheme(req, res) {
   const gymId = req.user.gymId;
-  const { accent_color } = req.body;
-  if (!accent_color || !/^#[0-9a-fA-F]{6}$/.test(accent_color)) {
-    return res.status(400).json({ message: "Cor inválida. Use o formato #rrggbb." });
+  const { accent_color, secondary_color } = req.body;
+  if (!accent_color || !HEX_RE.test(accent_color)) {
+    return res.status(400).json({ message: "Cor principal inválida. Use o formato #rrggbb." });
   }
-  await pool.query("UPDATE gyms SET accent_color = $1 WHERE id = $2", [accent_color, gymId]);
-  res.json({ accent_color });
+  if (!secondary_color || !HEX_RE.test(secondary_color)) {
+    return res.status(400).json({ message: "Cor secundária inválida. Use o formato #rrggbb." });
+  }
+  await pool.query("UPDATE gyms SET accent_color = $1, secondary_color = $2 WHERE id = $3", [
+    accent_color,
+    secondary_color,
+    gymId,
+  ]);
+  res.json({ accent_color, secondary_color });
 }
 
 // DELETE /api/gym/theme — CEO repõe o tema default.
 async function resetTheme(req, res) {
   const gymId = req.user.gymId;
-  await pool.query("UPDATE gyms SET accent_color = NULL WHERE id = $1", [gymId]);
-  res.json({ accent_color: null });
+  await pool.query("UPDATE gyms SET accent_color = NULL, secondary_color = NULL WHERE id = $1", [gymId]);
+  res.json({ accent_color: null, secondary_color: null });
 }
 
 module.exports = { getOverview, listGyms, createGym, assignOwner, searchUsers, patchUser, getGymDetail, deleteGym, updateTheme, resetTheme };

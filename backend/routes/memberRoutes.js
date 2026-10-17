@@ -19,8 +19,8 @@ const {
 
 const router = express.Router();
 
-const STAFF = requireRole("gym_owner", "personal_trainer", "nutritionist", "receptionist");
-const SUBSCRIPTION_MANAGERS = requireRole("gym_owner", "receptionist");
+const STAFF = requireRole("gym_owner", "personal_trainer", "nutritionist", "receptionist", "reception_station");
+const SUBSCRIPTION_MANAGERS = requireRole("gym_owner", "receptionist", "reception_station");
 // Repor password e mudar roles são mais sensíveis do que gerir
 // subscrições — só gym_owner, não rececionista.
 const PASSWORD_MANAGERS = requireRole("gym_owner");
@@ -32,7 +32,7 @@ router.get("/staff", requireAuth, STAFF, listStaff);
 router.get("/team-list", requireAuth, requireRole("gym_owner", "personal_trainer", "nutritionist", "receptionist", "intern"), listTeam);
 router.get("/me/subscriptions", requireAuth, getMySubscriptions);
 router.get("/", requireAuth, STAFF, listMembers);
-router.post("/", requireAuth, requireRole("gym_owner", "receptionist"), createPerson);
+router.post("/", requireAuth, requireRole("gym_owner", "receptionist", "reception_station"), createPerson);
 // "/team" antes de "/:id".
 router.post("/team", requireAuth, requireRole("gym_owner"), addToTeam);
 router.delete("/:id/team", requireAuth, requireRole("gym_owner"), removeFromTeam);

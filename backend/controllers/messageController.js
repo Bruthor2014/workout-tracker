@@ -1,6 +1,6 @@
 const pool = require("../db/pool");
 
-const STAFF_ROLES = ["gym_owner", "personal_trainer", "nutritionist"];
+const STAFF_ROLES = ["gym_owner", "personal_trainer", "nutritionist", "receptionist", "reception_station"];
 
 const CONTACT_COLS = `u.id, u.name, u.email, u.role, u.avatar_url`;
 

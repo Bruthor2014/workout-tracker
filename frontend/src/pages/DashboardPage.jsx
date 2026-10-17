@@ -216,7 +216,6 @@ export default function DashboardPage() {
                     type="button"
                     className="workout-row-delete"
                     onClick={(e) => handleDelete(e, session.id)}
-                    title="Eliminar treino"
                     aria-label="Eliminar treino"
                   >
                     <IconTrash size={17} />

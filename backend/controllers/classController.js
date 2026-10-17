@@ -327,7 +327,7 @@ async function confirmOccurrence(req, res) {
   if (cancelled.rows.length) return res.status(409).json({ message: "Esta aula foi cancelada." });
 
   const isInstructor = gymClass.instructor_id === req.user.id;
-  const isReception  = req.user.role === "receptionist" || req.user.role === "gym_owner";
+  const isReception  = ["receptionist", "reception_station"].includes(req.user.role) || req.user.role === "gym_owner";
   if (!isInstructor && !isReception) {
     return res.status(403).json({ message: "Sem permissão para confirmar esta aula." });
   }
@@ -406,7 +406,7 @@ async function cancelOccurrence(req, res) {
     [gymClass.id, class_date]
   );
   const staff = await pool.query(
-    `SELECT id FROM users WHERE gym_id=$1 AND role::text IN ('gym_owner','receptionist')`,
+    `SELECT id FROM users WHERE gym_id=$1 AND role::text IN ('gym_owner','receptionist','reception_station')`,
     [req.user.gymId]
   );
   const body = `❌ A aula "${gymClass.title}" de ${class_date} (${gymClass.start_time}–${gymClass.end_time}) foi cancelada.`;
@@ -438,7 +438,7 @@ async function unconfirmOccurrence(req, res) {
   }
 
   const isInstructor = gymClass.instructor_id === req.user.id;
-  const isReception  = req.user.role === "receptionist" || req.user.role === "gym_owner";
+  const isReception  = ["receptionist", "reception_station"].includes(req.user.role) || req.user.role === "gym_owner";
   if (!isInstructor && !isReception) {
     return res.status(403).json({ message: "Sem permissão." });
   }
@@ -513,7 +513,7 @@ async function autoCancel(req, res) {
       [gc.id, today]
     );
     const staff = await pool.query(
-      `SELECT id FROM users WHERE gym_id = $1 AND role::text IN ('gym_owner','receptionist')`,
+      `SELECT id FROM users WHERE gym_id = $1 AND role::text IN ('gym_owner','receptionist','reception_station')`,
       [gymId]
     );
     const body = `⚠️ A aula "${gc.title}" de hoje (${gc.start_time}–${gc.end_time}) foi cancelada por não haver substituto a tempo.`;

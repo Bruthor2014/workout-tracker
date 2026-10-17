@@ -366,9 +366,9 @@ function DayTimetable({ shifts, isToday, onShiftClick }) {
                       gap: 6, padding: "0 8px", overflow: "hidden",
                     }}
                     onClick={() => isToday && onShiftClick(shift)}
-                    title={`${shift.class_title} · ${shift.shift_start}–${shift.shift_end}`}
+                    aria-label={`${shift.class_title} · ${shift.shift_start}–${shift.shift_end}`}
                   >
-                    <span style={{ fontSize: "0.72rem", color: "#a78bfa", flexShrink: 0 }}>Aula</span>
+                    <span style={{ fontSize: "0.72rem", color: "var(--accent)", flexShrink: 0 }}>Aula</span>
                     <span style={{ fontSize: "0.78rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {shift.class_title}
                     </span>
@@ -394,7 +394,7 @@ function DayTimetable({ shifts, isToday, onShiftClick }) {
                     gap: 6, padding: "0 8px", overflow: "hidden",
                   }}
                   onClick={() => isToday && onShiftClick(shift)}
-                  title={`${shift.shift_start}–${shift.shift_end} · ${ACTIVITY_LABELS[shift.activity] || shift.activity}`}
+                  aria-label={`${shift.shift_start}–${shift.shift_end} · ${ACTIVITY_LABELS[shift.activity] || shift.activity}`}
                 >
                   <span style={{ fontSize: "0.78rem", fontWeight: 600, color: statusColor(shift.status), flexShrink: 0 }}>
                     {statusIcon(shift.status)}
@@ -478,7 +478,7 @@ export default function StaffAttendancePage() {
           onClick={() => setDate(prevDay(date))}>‹</button>
         <span style={{ minWidth: 220, textAlign: "center", fontSize: "0.95rem", textTransform: "capitalize" }}>
           {fmtDayLabel(date)}
-          {isToday && <span style={{ marginLeft: 8, fontSize: "0.72rem", color: "#a78bfa" }}>(hoje)</span>}
+          {isToday && <span style={{ marginLeft: 8, fontSize: "0.72rem", color: "var(--accent)" }}>(hoje)</span>}
         </span>
         <button className="glass-button glass-button-secondary" style={{ padding: "4px 10px" }}
           disabled={!isOwner && date >= TODAY_SV} onClick={() => setDate(nextDay(date))}>›</button>

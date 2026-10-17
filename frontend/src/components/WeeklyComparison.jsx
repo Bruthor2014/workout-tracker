@@ -19,7 +19,7 @@ function pctDelta(current, previous) {
 function DeltaBadge({ value }) {
   const tone = value > 0 ? "positive" : value < 0 ? "negative" : "neutral";
   return (
-    <span className={`stat-tile-delta ${tone}`} title="Comparado com o mesmo período da semana passada">
+    <span className={`stat-tile-delta ${tone}`} aria-label="Comparado com o mesmo período da semana passada">
       {value !== 0 && (
         <span style={{ display: "inline-flex", transform: value < 0 ? "rotate(180deg)" : undefined }}>
           <IconArrowUp size={12} />
@@ -100,8 +100,8 @@ function LineChart({ weeks }) {
       <svg className="line-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Treinos por semana">
         <defs>
           <linearGradient id="lineChartFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.45" />
-            <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+            <stop offset="0%" style={{ stopColor: "var(--accent-strong)" }} stopOpacity="0.45" />
+            <stop offset="100%" style={{ stopColor: "var(--accent-strong)" }} stopOpacity="0" />
           </linearGradient>
         </defs>
         {ticks.map((t) => (
@@ -113,7 +113,7 @@ function LineChart({ weeks }) {
           </g>
         ))}
         <path d={area} fill="url(#lineChartFill)" />
-        <path d={line} fill="none" stroke="#a78bfa" strokeWidth="2.2" strokeLinecap="round" />
+        <path d={line} fill="none" style={{ stroke: "var(--accent)" }} strokeWidth="2.2" strokeLinecap="round" />
         {hovered !== null && (
           <line
             x1={points[hovered].x}

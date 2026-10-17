@@ -4,9 +4,16 @@ import Modal from "./Modal";
 import Select from "./Select";
 import { IconSave } from "./Icons";
 import { apiRequest } from "../api/client";
-import { ROLE_LABELS, TEAM_ROLES } from "../utils/roles";
+import { ROLE_LABELS } from "../utils/roles";
 
-const ROLE_OPTIONS = TEAM_ROLES.map((value) => ({ value, label: ROLE_LABELS[value] }));
+// Cargos de equipa atribuíveis por email (espelha o TEAM_ROLES do
+// backend). Inclui "reception_station" — a conta do PC fixo da receção
+// — mas não via o TEAM_ROLES do frontend, que também controla acesso a
+// páginas de horário/equipa que essa conta não deve ter.
+const ROLE_OPTIONS = ["personal_trainer", "nutritionist", "receptionist", "intern", "reception_station"].map((value) => ({
+  value,
+  label: ROLE_LABELS[value],
+}));
 
 // CEO: juntar à equipa alguém que já está no ginásio, pelo email.
 export default function AddToTeamModal({ onClose, onAdded }) {

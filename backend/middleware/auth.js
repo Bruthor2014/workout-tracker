@@ -31,10 +31,11 @@ function requireRole(...allowedRoles) {
   };
 }
 
-// O CEO (gym_owner) e o DONO da plataforma são contas de gestão:
-// não têm treinos, planos nem dados pessoais próprios.
+// O CEO (gym_owner), o DONO da plataforma e a conta da receção (PC fixo
+// do balcão, não uma pessoa) são contas de gestão/estação: não têm
+// treinos, planos nem dados pessoais próprios.
 function notOwner(req, res, next) {
-  if (req.user.role === "gym_owner" || req.user.role === "dono") {
+  if (["gym_owner", "dono", "reception_station"].includes(req.user.role)) {
     return res.status(403).json({ message: "A conta de gestão não tem treinos nem dados pessoais." });
   }
   next();

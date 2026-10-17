@@ -3,7 +3,7 @@ const { requireAuth, requireRole } = require("../middleware/auth");
 const { getLive, getHistory, checkIn, checkOut, getAbsences } = require("../controllers/occupancyController");
 
 const router = express.Router();
-const STAFF = requireRole("gym_owner", "receptionist");
+const STAFF = requireRole("gym_owner", "receptionist", "reception_station");
 
 router.get("/live", requireAuth, STAFF, getLive);
 router.get("/history", requireAuth, STAFF, getHistory);

@@ -7,7 +7,7 @@ import { apiRequest } from "../api/client";
 import { ROLE_LABELS } from "../utils/roles";
 
 // Cargos que o CEO pode dar (espelha ASSIGNABLE_ROLES do backend).
-const ROLE_OPTIONS = ["member", "personal_trainer", "nutritionist", "receptionist", "intern"].map((value) => ({
+const ROLE_OPTIONS = ["member", "personal_trainer", "nutritionist", "receptionist", "intern", "reception_station"].map((value) => ({
   value,
   label: ROLE_LABELS[value],
 }));

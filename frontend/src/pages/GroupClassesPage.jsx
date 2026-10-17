@@ -248,7 +248,7 @@ function OccurrenceConfirm({ gymClass, date, user, onChanged }) {
   const [error, setError] = useState("");
 
   const isInstructor = gymClass.instructor_id === user.id;
-  const isReception  = user.role === "receptionist" || user.role === "gym_owner";
+  const isReception  = ["receptionist", "reception_station"].includes(user.role) || user.role === "gym_owner";
   const myConfirmed  = isInstructor ? gymClass.instructor_confirmed : gymClass.reception_confirmed;
   const canConfirm   = (isInstructor || isReception) && !myConfirmed;
   const canUnconfirm = isReception && gymClass.reception_confirmed;
@@ -409,7 +409,7 @@ function ClassDetailModal({ gymClass, user, onClose, onChanged, onEdit }) {
         )}
 
         {/* Confirmation panel for today's occurrence */}
-        {gymClass.next_date === TODAY_SV && !gymClass.cancelled_reason && (gymClass.instructor_id === user.id || user.role === "gym_owner" || user.role === "receptionist") && (
+        {gymClass.next_date === TODAY_SV && !gymClass.cancelled_reason && (gymClass.instructor_id === user.id || user.role === "gym_owner" || ["receptionist", "reception_station"].includes(user.role)) && (
           <OccurrenceConfirm gymClass={gymClass} date={TODAY_SV} user={user} onChanged={onChanged} />
         )}
 
@@ -510,7 +510,7 @@ export default function GroupClassesPage() {
   const [editing, setEditing] = useState(null); // aula a editar, "new", ou null
   const [viewing, setViewing] = useState(null);
 
-  const isReception = user.role === "receptionist";
+  const isReception = ["receptionist", "reception_station"].includes(user.role);
 
   const load = useCallback(() => {
     apiRequest("/classes")

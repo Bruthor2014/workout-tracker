@@ -10,7 +10,10 @@ import { useAuth } from "../context/AuthContext";
 export default function RedirectIfAuthed({ to = "/dashboard", children }) {
   const { token, user } = useAuth();
   if (token) {
-    const dest = user?.role === "dono" ? "/dono" : user?.role === "gym_owner" ? "/management" : to;
+    const dest = user?.role === "dono" ? "/dono"
+      : user?.role === "gym_owner" ? "/management"
+      : user?.role === "reception_station" ? "/occupancy"
+      : to;
     return <Navigate to={dest} replace />;
   }
   return children;

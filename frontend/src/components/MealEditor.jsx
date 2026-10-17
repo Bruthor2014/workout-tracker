@@ -35,7 +35,6 @@ function FoodPhotoButton({ imageUrl, onUploaded, onError }) {
         type="button"
         className={`food-photo-button${imageUrl ? " has-image" : ""}`}
         onClick={() => inputRef.current.click()}
-        title={imageUrl ? "Trocar foto" : "Adicionar foto"}
         aria-label={imageUrl ? "Trocar foto" : "Adicionar foto"}
         disabled={uploading}
       >
@@ -134,7 +133,6 @@ export default function MealEditor({ meal, onChange, onRemove, canRemove = true,
                 className="nf-icon-danger"
                 onClick={() => setOptions(meal.options.filter((_, j) => j !== optIndex))}
                 disabled={meal.options.length === 1}
-                title="Remover opção"
                 aria-label={`Remover opção ${optIndex + 1}`}
               >
                 <IconTrash size={17} />
@@ -169,7 +167,6 @@ export default function MealEditor({ meal, onChange, onRemove, canRemove = true,
                       type="button"
                       className="meal-item-search"
                       onClick={() => setSearchTarget({ optIndex, itemIndex })}
-                      title="Pesquisar produto do supermercado"
                       aria-label="Pesquisar produto do supermercado"
                     >
                       <IconSearch size={16} />
@@ -194,7 +191,6 @@ export default function MealEditor({ meal, onChange, onRemove, canRemove = true,
                   className="nf-icon-danger"
                   onClick={() => removeItem(optIndex, itemIndex)}
                   disabled={option.items.length === 1}
-                  title="Remover elemento"
                   aria-label="Remover elemento"
                 >
                   <IconTrash size={17} />

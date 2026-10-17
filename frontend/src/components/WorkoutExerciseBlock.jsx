@@ -8,7 +8,7 @@ import { CARDIO_GROUP } from "../utils/muscleGroups";
 const TECHNIQUE_OPTIONS = SET_TYPES.map((type) => ({
   value: type.value,
   label: type.label,
-  color: type.color || "#a78bfa",
+  color: type.color || "var(--accent)",
   description: type.hint || "Séries normais, com descanso entre elas.",
 }));
 
@@ -76,7 +76,6 @@ export default function WorkoutExerciseBlock({
           className="log-set-delete"
           onClick={onRemove}
           disabled={!canRemove}
-          title="Remover exercício"
           aria-label="Remover exercício"
         >
           <IconTrash size={18} />
@@ -144,7 +143,6 @@ export default function WorkoutExerciseBlock({
                 value={set.reps}
                 onChange={(e) => updateSet(setIndex, "reps", e.target.value)}
                 placeholder={set.repsHint ? `Alvo: ${set.repsHint}` : isCardio ? "Minutos" : type.repsPlaceholder}
-                title={set.repsHint ? `Reps alvo do plano: ${set.repsHint}` : undefined}
                 aria-label={`${isCardio ? "Minutos" : "Repetições"} — ${rowLabel} ${setIndex + 1}`}
                 disabled={set.done}
               />
@@ -156,7 +154,6 @@ export default function WorkoutExerciseBlock({
                 value={set.weight}
                 onChange={(e) => updateSet(setIndex, "weight", e.target.value)}
                 placeholder={set.weightHint ? `Alvo: ${set.weightHint} kg` : weightLabel}
-                title={set.weightHint ? `Carga alvo do plano: ${set.weightHint} kg` : undefined}
                 aria-label={`${isCardio ? "Distância em km" : "Carga em kg"} — ${rowLabel} ${setIndex + 1}`}
                 disabled={set.done}
               />
@@ -165,7 +162,6 @@ export default function WorkoutExerciseBlock({
                 className={`log-set-check${set.done ? " checked" : ""}`}
                 onClick={() => onToggleDone(setIndex)}
                 disabled={!set.done && !canComplete}
-                title={set.done ? "Desmarcar (voltar a editar)" : canComplete ? "Marcar como feita" : "Preenche as reps primeiro"}
                 aria-label={`${set.done ? "Desmarcar" : "Marcar como feita"} — ${rowLabel} ${setIndex + 1}`}
                 aria-pressed={Boolean(set.done)}
               >
@@ -176,7 +172,6 @@ export default function WorkoutExerciseBlock({
                 className="log-exercise-set-remove"
                 onClick={() => removeSet(setIndex)}
                 disabled={ex.sets.length === 1 || set.done}
-                title={`Remover ${rowLabel}`}
                 aria-label={`Remover ${rowLabel} ${setIndex + 1}`}
               >
                 ×

@@ -314,7 +314,7 @@ export default function ClientsPage() {
                   ) : (
                     <span className="text-secondary client-no-session">Sem {lowerFirst(label)} marcada</span>
                   )}
-                  <button type="button" className="client-session-add" onClick={() => setEditing({ new: c.id })} title={`Marcar ${lowerFirst(label)} com ${c.name}`}>
+                  <button type="button" className="client-session-add" onClick={() => setEditing({ new: c.id })} aria-label={`Marcar ${lowerFirst(label)} com ${c.name}`}>
                     +
                   </button>
                 </div>

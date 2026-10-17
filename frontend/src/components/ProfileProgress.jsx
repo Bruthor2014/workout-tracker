@@ -10,9 +10,11 @@ const WEEKS = 12; // janela dos gráficos semanais
 const RECORDS_SHOWN = 6;
 const MONTH_LABELS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
-// Cores das duas séries (cada gráfico tem uma só) — validadas com o
-// validate_palette do skill de dataviz contra o fundo escuro dos cartões.
-const HOURS_COLOR = "#8b5cf6";
+// Cores das duas séries (cada gráfico tem uma só). HOURS_COLOR segue o
+// tema do ginásio (destaque); VOLUME_COLOR fica fixa a propósito — são
+// dois gráficos diferentes e precisam de se distinguir visualmente mesmo
+// quando o tema deixa as duas cores do ginásio parecidas.
+const HOURS_COLOR = "var(--accent-strong)";
 const VOLUME_COLOR = "#0d9488";
 
 const parseKey = (key) => new Date(`${key}T00:00:00`);

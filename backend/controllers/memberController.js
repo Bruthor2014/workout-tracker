@@ -79,7 +79,7 @@ async function getMember(req, res) {
 async function listTeam(req, res) {
   const result = await pool.query(
     `SELECT id, name, role::text, email, avatar_url FROM users
-      WHERE gym_id = $1 AND role::text IN ('personal_trainer','nutritionist','receptionist','intern')
+      WHERE gym_id = $1 AND role::text IN ('personal_trainer','nutritionist','receptionist','intern','reception_station')
       ORDER BY name`,
     [req.user.gymId]
   );
@@ -131,7 +131,7 @@ async function resetMemberPassword(req, res) {
 // propósito 'gym_owner' (criar outro dono é uma ação rara/alto-risco,
 // melhor feita diretamente na BD) e 'admin' (reservado à plataforma, nunca
 // atribuível por um gym_owner).
-const ASSIGNABLE_ROLES = ["member", "personal_trainer", "nutritionist", "receptionist", "intern"];
+const ASSIGNABLE_ROLES = ["member", "personal_trainer", "nutritionist", "receptionist", "intern", "reception_station"];
 
 // PUT /api/members/:id/role — gym_owner muda o role de alguém do seu
 // ginásio (ex: promover um membro a nutricionista). Não está restrito a
@@ -162,9 +162,9 @@ async function updateMemberRole(req, res) {
 // POST /api/members — o CEO adiciona alguém ao ginásio (membro ou equipa),
 // já com a password inicial (a pessoa pode mudá-la depois).
 async function createPerson(req, res) {
-  // Receptionist can only create members, not staff roles.
+  // Receptionist e a conta da receção só podem criar membros, não staff.
   const { name: rawName, email, password: rawPassword, role: rawRole = "member" } = req.body;
-  const role = req.user.role === "receptionist" ? "member" : rawRole;
+  const role = ["receptionist", "reception_station"].includes(req.user.role) ? "member" : rawRole;
   if (!email) return res.status(400).json({ message: "Email é obrigatório." });
 
   // Auto-fill name and password from email when not provided (receptionist quick-add flow)
@@ -200,7 +200,7 @@ async function createPerson(req, res) {
   res.status(201).json({ ...result.rows[0], temp_password: wasAutoPassword ? password : undefined });
 }
 
-const TEAM_ROLES = ["personal_trainer", "nutritionist", "receptionist", "intern"];
+const TEAM_ROLES = ["personal_trainer", "nutritionist", "receptionist", "intern", "reception_station"];
 
 // POST /api/members/team — o CEO junta à equipa alguém do ginásio, pelo
 // email, com o cargo indicado.

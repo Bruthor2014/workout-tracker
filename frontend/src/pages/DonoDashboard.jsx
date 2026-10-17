@@ -98,6 +98,7 @@ const ASSIGNABLE_ROLES = [
   { value: "nutritionist", label: "Nutricionista" },
   { value: "receptionist", label: "Rececionista" },
   { value: "intern", label: "Estagiário" },
+  { value: "reception_station", label: "Receção" },
 ];
 
 function EditUserModal({ user, gyms, onClose, onSaved }) {
@@ -168,7 +169,7 @@ function UserAvatar({ user, size = 36 }) {
 }
 
 const SERVICE_LABELS = { personal_training: "Personal Training", nutrition_plan: "Nutrição", gym_membership: "Ginásio" };
-const ROLE_SHORT = { personal_trainer: "PT", nutritionist: "Nutricionista", receptionist: "Rececionista", intern: "Estagiário", gym_owner: "CEO" };
+const ROLE_SHORT = { personal_trainer: "PT", nutritionist: "Nutricionista", receptionist: "Rececionista", intern: "Estagiário", gym_owner: "CEO", reception_station: "Receção" };
 
 function GymDetailModal({ gymId, onClose, onDeleted, onChangeOwner }) {
   const [detail, setDetail] = useState(null);

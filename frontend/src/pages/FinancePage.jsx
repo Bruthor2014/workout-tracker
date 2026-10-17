@@ -201,7 +201,7 @@ function StaffMonthModal({ staffId, staffName, month, onClose }) {
                   transition: "background 0.15s",
                 }}
                 onClick={() => { navigate(`/staff-attendance?date=${r.shift_date}`); onClose(); }}
-                title="Clicar para ver/editar presenças deste dia">
+                aria-label="Clicar para ver/editar presenças deste dia">
                 <span style={{ minWidth: 54, color: "var(--text-secondary)", fontSize: "0.78rem", flexShrink: 0 }}>
                   {DAY_NAMES[r.weekday]} {r.shift_date.slice(8)}
                 </span>

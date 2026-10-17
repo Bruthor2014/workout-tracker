@@ -92,7 +92,7 @@ async function login(req, res) {
 
   const result = await pool.query(
     `SELECT u.id, u.gym_id, u.name, u.email, u.password_hash, u.role, u.avatar_url, u.invite_code,
-            g.accent_color AS gym_accent
+            g.accent_color AS gym_accent, g.secondary_color AS gym_secondary
        FROM users u
        LEFT JOIN gyms g ON g.id = u.gym_id
       WHERE u.email = $1`,

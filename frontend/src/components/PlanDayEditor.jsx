@@ -86,7 +86,6 @@ export default function PlanDayEditor({ day, exercises, onChange, onRemove, canR
                 onChange={(e) => updateRow(exIndex, "target_reps", e.target.value)}
                 placeholder={isCardio ? "Minutos" : "Ex: 8-12"}
                 aria-label="Reps"
-                title="Um número (ex: 10) ou um intervalo (ex: 8-12)"
               />
               <input
                 type="number"
@@ -103,7 +102,6 @@ export default function PlanDayEditor({ day, exercises, onChange, onRemove, canR
                 className="nf-icon-danger"
                 onClick={() => setRows(day.exercises.filter((_, j) => j !== exIndex))}
                 disabled={day.exercises.length === 1}
-                title="Remover exercício"
                 aria-label="Remover exercício"
               >
                 <IconTrash size={17} />

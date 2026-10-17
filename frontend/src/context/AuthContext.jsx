@@ -15,7 +15,7 @@ export function AuthProvider({ children }) {
     const stored = localStorage.getItem("user");
     if (stored) {
       const u = JSON.parse(stored);
-      if (u?.gym_accent) applyTheme(u.gym_accent);
+      if (u?.gym_accent) applyTheme(u.gym_accent, u.gym_secondary);
     }
   }, []);
 
@@ -24,7 +24,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem("user", JSON.stringify(newUser));
     setToken(newToken);
     setUser(newUser);
-    if (newUser?.gym_accent) applyTheme(newUser.gym_accent);
+    if (newUser?.gym_accent) applyTheme(newUser.gym_accent, newUser.gym_secondary);
     else resetTheme();
   }
 
@@ -42,8 +42,8 @@ export function AuthProvider({ children }) {
     setUser((prev) => {
       const next = { ...prev, ...patch };
       localStorage.setItem("user", JSON.stringify(next));
-      if (patch.gym_accent !== undefined) {
-        if (patch.gym_accent) applyTheme(patch.gym_accent);
+      if (patch.gym_accent !== undefined || patch.gym_secondary !== undefined) {
+        if (next.gym_accent) applyTheme(next.gym_accent, next.gym_secondary);
         else resetTheme();
       }
       return next;

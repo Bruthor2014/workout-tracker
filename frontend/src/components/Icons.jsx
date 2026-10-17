@@ -156,8 +156,8 @@ export function IconLogoMark({ size = 24, className }) {
     <svg viewBox="0 0 24 24" fill="none" width={size} height={size} className={className}>
       <defs>
         <linearGradient id="logoMarkGradient" x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0%" stopColor="#4f46e5" />
-          <stop offset="100%" stopColor="#c026d3" />
+          <stop offset="0%" style={{ stopColor: "var(--accent-strong)" }} />
+          <stop offset="100%" style={{ stopColor: "var(--accent)" }} />
         </linearGradient>
       </defs>
       <path

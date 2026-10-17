@@ -160,7 +160,6 @@ export default function PlanCard({ plan, exercises, editable: editableProp, canS
               onClick={handleDelete}
               disabled={deleting}
               aria-label="Eliminar plano"
-              title="Eliminar plano"
             >
               <IconTrash size={16} />
             </button>

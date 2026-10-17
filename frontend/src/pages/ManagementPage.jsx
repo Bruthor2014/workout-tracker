@@ -8,14 +8,14 @@ import { apiRequest, resolveAssetUrl } from "../api/client";
 import { ROLE_COLORS, ROLE_LABELS } from "../utils/roles";
 import { weekdayName } from "../utils/schedule";
 import { useAuth } from "../context/AuthContext";
-import { applyTheme, resetTheme, deriveTheme } from "../utils/theme";
+import { applyTheme, resetTheme } from "../utils/theme";
 
 const SERVICE_LABELS = {
   gym_membership: "Inscrição no ginásio",
   personal_training: "Personal training",
   nutrition_plan: "Plano de nutrição",
 };
-const WORKOUTS_COLOR = "#8b5cf6"; // mesma série/cor dos gráficos do perfil
+const WORKOUTS_COLOR = "var(--accent-strong)"; // segue o tema do ginásio
 const fmt = (n, d = 0) => Number(n).toLocaleString("pt-PT", { maximumFractionDigits: d });
 
 function Tile({ icon: Icon, label, value, caption, to }) {
@@ -43,27 +43,55 @@ function Tile({ icon: Icon, label, value, caption, to }) {
 }
 
 const DEFAULT_ACCENT = "#a78bfa";
+const DEFAULT_SECONDARY = "#6d5bd0";
+
+function ColorField({ label, value, onChange }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <label style={{ fontSize: "0.8rem" }} className="text-secondary">{label}</label>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{
+          width: 42, height: 42, borderRadius: 10, background: value,
+          border: "2px solid rgba(255,255,255,0.15)",
+          boxShadow: `0 0 18px ${value}88`,
+          flexShrink: 0,
+        }} />
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          style={{ width: 42, height: 42, cursor: "pointer", border: "none", background: "none", padding: 0, borderRadius: 8 }}
+        />
+        <span style={{ fontFamily: "monospace", fontSize: "0.9rem", color: "var(--text-secondary)" }}>{value}</span>
+      </div>
+    </div>
+  );
+}
 
 function GymThemeSection() {
   const { user, updateUser } = useAuth();
-  const currentAccent = user?.gym_accent || DEFAULT_ACCENT;
-  const [picked, setPicked] = useState(currentAccent);
+  const [primary, setPrimary] = useState(user?.gym_accent || DEFAULT_ACCENT);
+  const [secondary, setSecondary] = useState(user?.gym_secondary || DEFAULT_SECONDARY);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [resetting, setResetting] = useState(false);
 
-  // Preview em tempo real enquanto o CEO ajusta a cor.
-  function handleChange(e) {
-    const c = e.target.value;
-    setPicked(c);
-    applyTheme(c);
+  // Preview em tempo real enquanto o CEO ajusta as cores — aplica logo a
+  // toda a app (fundo, sidebar, cartões), não só a este cartão.
+  function handlePrimaryChange(c) {
+    setPrimary(c);
+    applyTheme(c, secondary);
+  }
+  function handleSecondaryChange(c) {
+    setSecondary(c);
+    applyTheme(primary, c);
   }
 
   async function handleSave() {
     setSaving(true); setSaved(false);
     try {
-      await apiRequest("/gym/theme", { method: "PUT", body: { accent_color: picked } });
-      updateUser({ gym_accent: picked });
+      await apiRequest("/gym/theme", { method: "PUT", body: { accent_color: primary, secondary_color: secondary } });
+      updateUser({ gym_accent: primary, gym_secondary: secondary });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } finally { setSaving(false); }
@@ -73,60 +101,25 @@ function GymThemeSection() {
     setResetting(true);
     try {
       await apiRequest("/gym/theme", { method: "DELETE" });
-      updateUser({ gym_accent: null });
-      setPicked(DEFAULT_ACCENT);
+      updateUser({ gym_accent: null, gym_secondary: null });
+      setPrimary(DEFAULT_ACCENT);
+      setSecondary(DEFAULT_SECONDARY);
       resetTheme();
     } finally { setResetting(false); }
   }
 
-  const preview = deriveTheme(picked);
-  const isDefault = picked === DEFAULT_ACCENT && !user?.gym_accent;
+  const isDefault = !user?.gym_accent;
 
   return (
     <GlassCard strong style={{ padding: "22px 24px", marginTop: 24 }}>
       <h3 style={{ margin: "0 0 6px", fontSize: "1.05rem" }}>Tema do ginásio</h3>
       <p className="text-secondary" style={{ fontSize: "0.82rem", margin: "0 0 20px" }}>
-        A cor principal é aplicada a todos os utilizadores associados a este ginásio.
+        Estas duas cores são aplicadas a toda a app para quem está registado neste ginásio — fundo, barra lateral e cartões incluídos.
       </p>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
-        {/* Color picker */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <label style={{ fontSize: "0.8rem" }} className="text-secondary">Cor principal</label>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{
-              width: 42, height: 42, borderRadius: 10, background: picked,
-              border: "2px solid rgba(255,255,255,0.15)",
-              boxShadow: `0 0 18px ${picked}88`,
-              flexShrink: 0,
-            }} />
-            <input
-              type="color"
-              value={picked}
-              onChange={handleChange}
-              style={{ width: 42, height: 42, cursor: "pointer", border: "none", background: "none", padding: 0, borderRadius: 8 }}
-            />
-            <span style={{ fontFamily: "monospace", fontSize: "0.9rem", color: "var(--text-secondary)" }}>{picked}</span>
-          </div>
-        </div>
-
-        {/* Preview das cores derivadas */}
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {[
-            { label: "Accent", color: preview.accent },
-            { label: "Strong", color: preview.accentStrong },
-            { label: "Fundo", color: preview.bgBase },
-          ].map(({ label, color }) => (
-            <div key={label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: 8, background: color,
-                border: "1px solid rgba(255,255,255,0.12)",
-                boxShadow: `0 0 12px ${color}66`,
-              }} />
-              <span style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>{label}</span>
-            </div>
-          ))}
-        </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
+        <ColorField label="Cor principal" value={primary} onChange={handlePrimaryChange} />
+        <ColorField label="Cor secundária" value={secondary} onChange={handleSecondaryChange} />
 
         {/* Botões */}
         <div style={{ display: "flex", gap: 8, marginLeft: "auto", flexShrink: 0 }}>
@@ -300,7 +293,7 @@ export default function ManagementPage() {
           <ul className="management-staff">
             {data.staff_load.map((s) => (
               <li key={s.id} style={{ "--role-color": ROLE_COLORS[s.role] }}>
-                <Link to={`/members/${s.id}`} className="management-staff-link" title={`Abrir o perfil de ${s.name}`}>
+                <Link to={`/members/${s.id}`} className="management-staff-link" aria-label={`Abrir o perfil de ${s.name}`}>
                   <span className="management-staff-name">
                     <strong>{s.name}</strong>
                     <span className="member-tile-role">{ROLE_LABELS[s.role] || s.role}</span>
@@ -310,7 +303,7 @@ export default function ManagementPage() {
                     {s.clients > 0 && ` · ${s.clients} ${s.clients === 1 ? "cliente" : "clientes"}`}
                   </span>
                 </Link>
-                <button type="button" className="team-remove" onClick={() => removeFromTeam(s)} title={`Tirar ${s.name} da equipa`}>
+                <button type="button" className="team-remove" onClick={() => removeFromTeam(s)} aria-label={`Tirar ${s.name} da equipa`}>
                   Remover
                 </button>
               </li>

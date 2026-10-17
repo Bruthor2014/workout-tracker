@@ -198,7 +198,7 @@ export default function App() {
           <Route
             path="/team-schedule"
             element={
-              <RequireRole roles={["gym_owner", "receptionist"]}>
+              <RequireRole roles={["gym_owner", "reception_station"]}>
                 <TeamSchedulePage />
               </RequireRole>
             }
@@ -230,7 +230,7 @@ export default function App() {
           <Route
             path="/occupancy"
             element={
-              <RequireRole roles={["gym_owner", "receptionist"]}>
+              <RequireRole roles={["gym_owner", "receptionist", "reception_station"]}>
                 <OccupancyPage />
               </RequireRole>
             }

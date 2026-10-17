@@ -44,7 +44,7 @@ export default function AvatarUploader({ size = 56 }) {
         className="profile-avatar"
         style={{ width: size, height: size, fontSize: size * 0.4 }}
         onClick={() => inputRef.current?.click()}
-        title="Trocar foto de perfil"
+        aria-label="Trocar foto de perfil"
       >
         {avatarUrl ? (
           <img src={avatarUrl} alt="" className="profile-avatar-img" />

@@ -18,7 +18,7 @@ const router = express.Router();
 const COACHES = requireRole("personal_trainer", "nutritionist");
 
 router.get("/", requireAuth, COACHES, listClients);
-router.get("/sessions", requireAuth, requireRole("personal_trainer", "nutritionist", "gym_owner"), listSessions);
+router.get("/sessions", requireAuth, requireRole("personal_trainer", "nutritionist", "gym_owner", "reception_station"), listSessions);
 router.post("/sessions", requireAuth, COACHES, createSession);
 router.put("/sessions/:id", requireAuth, COACHES, updateSession);
 router.delete("/sessions/:id", requireAuth, COACHES, deleteSession);

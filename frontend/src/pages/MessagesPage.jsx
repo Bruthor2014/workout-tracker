@@ -101,7 +101,10 @@ export default function MessagesPage() {
   const selectedContact = contacts.find((c) => c.id === selectedId);
   const isStaff = STAFF_ROLES.includes(user.role);
   const filteredContacts = contactSearch.trim()
-    ? contacts.filter((c) => c.name.toLowerCase().includes(contactSearch.toLowerCase()))
+    ? contacts.filter((c) => {
+        const q = contactSearch.toLowerCase();
+        return c.name.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q);
+      })
     : contacts;
 
   return (
@@ -123,7 +126,7 @@ export default function MessagesPage() {
             <input
               type="text"
               className="glass-input"
-              placeholder="Pesquisar..."
+              placeholder="Pesquisar por nome ou email..."
               value={contactSearch}
               onChange={(e) => setContactSearch(e.target.value)}
               style={{ width: "100%", fontSize: "0.85rem", padding: "6px 10px" }}

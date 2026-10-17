@@ -9,6 +9,7 @@ export const ROLE_LABELS = {
   nutritionist: "Nutricionista",
   intern: "Estagiário",
   receptionist: "Rececionista",
+  reception_station: "Receção",
 };
 
 export const ROLE_COLORS = {
@@ -19,6 +20,7 @@ export const ROLE_COLORS = {
   nutritionist: "#10b981",
   intern: "#06b6d4",
   receptionist: "#3b82f6",
+  reception_station: "#0ea5e9",
 };
 
 // Grupos de roles usados para decidir o que cada conta vê.

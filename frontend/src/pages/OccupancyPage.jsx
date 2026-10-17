@@ -4,7 +4,7 @@ import Modal from "../components/Modal";
 import { apiRequest, resolveAssetUrl } from "../api/client";
 import { ROLE_LABELS } from "../utils/roles";
 
-const STAFF_ROLES = ["personal_trainer", "nutritionist", "receptionist", "intern", "gym_owner"];
+const STAFF_ROLES = ["personal_trainer", "nutritionist", "receptionist", "intern", "gym_owner", "reception_station"];
 const DAY_NAMES = ["", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const ACTIVITY_LABELS = { floor: "Sala", class: "Aula", reception: "Receção", assessments: "Avaliações", admin: "Admin", other: "Outro" };
 
@@ -62,25 +62,35 @@ function fmtWeekLabel(mondayStr) {
 }
 const TODAY_SV = new Date().toLocaleDateString("sv");
 
-function CheckInModal({ members, onClose, onDone }) {
-  const [userId, setUserId] = useState("");
+function CheckInModal({ onClose, onDone }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [selected, setSelected] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // Ordenar: staff primeiro.
-  const sorted = [...members].sort((a, b) => {
-    const aStaff = STAFF_ROLES.includes(a.role) ? 0 : 1;
-    const bStaff = STAFF_ROLES.includes(b.role) ? 0 : 1;
-    return aStaff - bStaff || a.name.localeCompare(b.name);
-  });
+  // Pesquisa por email (ou nome) em vez de carregar toda a lista de membros
+  // — com milhares de pessoas no ginásio não dá para percorrer um dropdown.
+  useEffect(() => {
+    if (selected || query.trim().length < 2) { setResults([]); return; }
+    setSearching(true);
+    const timer = setTimeout(() => {
+      apiRequest(`/members?search=${encodeURIComponent(query.trim())}&limit=8`)
+        .then((data) => setResults(Array.isArray(data) ? data : data.members))
+        .catch((err) => setError(err.message))
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, selected]);
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!userId) return setError("Escolhe um membro.");
+    if (!selected) return setError("Procura e escolhe uma pessoa pelo email.");
     setSaving(true);
     setError("");
     try {
-      await apiRequest("/occupancy/checkin", { method: "POST", body: { user_id: Number(userId) } });
+      await apiRequest("/occupancy/checkin", { method: "POST", body: { user_id: selected.id } });
       onDone();
       onClose();
     } catch (err) {
@@ -95,21 +105,50 @@ function CheckInModal({ members, onClose, onDone }) {
         <h3>Registar entrada</h3>
         <form onSubmit={handleSubmit} style={{ marginTop: 14 }}>
           <div className="form-row">
-            <label className="field-label">Pessoa</label>
-            <select className="glass-input" value={userId} onChange={(e) => setUserId(e.target.value)}
-              style={{ color: "var(--text-primary)", background: "var(--glass-bg)" }}>
-              <option value="">— Escolher —</option>
-              {sorted.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}{STAFF_ROLES.includes(m.role) ? ` (${ROLE_LABELS[m.role] || m.role})` : ""}
-                </option>
-              ))}
-            </select>
+            <label className="field-label">Email ou nome</label>
+            {selected ? (
+              <div className="glass-input" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span>
+                  {selected.name}
+                  <span className="text-secondary" style={{ marginLeft: 6, fontSize: "0.82rem" }}>
+                    {selected.email}{STAFF_ROLES.includes(selected.role) ? ` · ${ROLE_LABELS[selected.role] || selected.role}` : ""}
+                  </span>
+                </span>
+                <button type="button" className="glass-button glass-button-secondary" style={{ padding: "2px 10px", fontSize: "0.78rem" }}
+                  onClick={() => { setSelected(null); setQuery(""); }}>Trocar</button>
+              </div>
+            ) : (
+              <>
+                <input type="text" className="glass-input" autoFocus placeholder="ex: joao@gmail.com"
+                  value={query} onChange={(e) => setQuery(e.target.value)}
+                  style={{ color: "var(--text-primary)", background: "var(--glass-bg)" }} />
+                {searching && <p className="text-secondary" style={{ fontSize: "0.82rem", marginTop: 6 }}>A procurar...</p>}
+                {!searching && query.trim().length >= 2 && results.length === 0 && (
+                  <p className="text-secondary" style={{ fontSize: "0.82rem", marginTop: 6 }}>Ninguém encontrado.</p>
+                )}
+                {results.length > 0 && (
+                  <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4, maxHeight: 220, overflowY: "auto" }}>
+                    {results.map((m) => (
+                      <button key={m.id} type="button" className="glass-button glass-button-secondary"
+                        style={{ justifyContent: "flex-start", textAlign: "left", padding: "8px 12px" }}
+                        onClick={() => setSelected(m)}>
+                        <span>
+                          {m.name}
+                          <span className="text-secondary" style={{ marginLeft: 6, fontSize: "0.82rem" }}>
+                            {m.email}{STAFF_ROLES.includes(m.role) ? ` · ${ROLE_LABELS[m.role] || m.role}` : ""}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </div>
           {error && <p className="error-text">{error}</p>}
           <div className="form-actions">
             <button type="button" className="glass-button glass-button-secondary" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="glass-button" disabled={saving}>{saving ? "..." : "Registar entrada"}</button>
+            <button type="submit" className="glass-button" disabled={saving || !selected}>{saving ? "..." : "Registar entrada"}</button>
           </div>
         </form>
       </GlassCard>
@@ -121,7 +160,6 @@ export default function OccupancyPage() {
   const [live, setLive] = useState([]);
   const [history, setHistory] = useState([]);
   const [absences, setAbsences] = useState([]);
-  const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [checkingIn, setCheckingIn] = useState(false);
@@ -141,9 +179,8 @@ export default function OccupancyPage() {
     Promise.all([
       apiRequest("/occupancy/live"),
       apiRequest(`/occupancy/history?date=${historyDate}`),
-      apiRequest("/members"),
     ])
-      .then(([l, h, m]) => { setLive(l); setHistory(h); setMembers(m); })
+      .then(([l, h]) => { setLive(l); setHistory(h); })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }
@@ -373,7 +410,7 @@ export default function OccupancyPage() {
       )}
 
       {checkingIn && (
-        <CheckInModal members={members} onClose={() => setCheckingIn(false)} onDone={load} />
+        <CheckInModal onClose={() => setCheckingIn(false)} onDone={load} />
       )}
     </div>
   );

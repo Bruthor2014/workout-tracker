@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext";
 import GlassCard from "../components/GlassCard";
 import Modal from "../components/Modal";
 import Select from "../components/Select";
@@ -202,6 +203,10 @@ function ShiftFormModal({ initial, staff, defaultStaffId, onClose, onSaved }) {
 // horário semanal — turnos + aulas de grupo de que é responsável — e criar,
 // editar ou remover turnos.
 export default function TeamSchedulePage() {
+  const { user } = useAuth();
+  // A receção só vê o horário — criar/editar/remover turnos e gerar
+  // horário automático é só do CEO.
+  const canEdit = user?.role === "gym_owner";
   const [staff, setStaff] = useState([]);
   const [selected, setSelected] = useState("");
   const [shifts, setShifts] = useState([]);
@@ -291,32 +296,34 @@ export default function TeamSchedulePage() {
           </span>
           <h1>Horários da equipa</h1>
         </div>
-        <div className="page-header-actions">
-          <button type="button" className="glass-button" onClick={() => setGenerating(true)} disabled={staff.length === 0}>
-            ⚡ Gerar horário automático
-          </button>
-          <button
-            type="button"
-            className="glass-button glass-button-secondary"
-            onClick={() => setEditing("new")}
-            disabled={staff.length === 0}
-            style={{ display: "inline-flex", gap: 8, alignItems: "center" }}
-          >
-            <IconPlusCircle size={18} />
-            Novo turno
-          </button>
-          {visibleShifts.length > 0 && (
+        {canEdit && (
+          <div className="page-header-actions">
+            <button type="button" className="glass-button" onClick={() => setGenerating(true)} disabled={staff.length === 0}>
+              ⚡ Gerar horário automático
+            </button>
             <button
               type="button"
-              className="nf-text-danger"
-              onClick={clearSchedule}
-              title={selected ? `Limpar todos os turnos de ${person?.name}` : "Limpar todos os turnos da equipa"}
+              className="glass-button glass-button-secondary"
+              onClick={() => setEditing("new")}
+              disabled={staff.length === 0}
+              style={{ display: "inline-flex", gap: 8, alignItems: "center" }}
             >
-              <IconTrash size={16} />
-              {selected ? "Limpar turnos" : "Limpar horário"}
+              <IconPlusCircle size={18} />
+              Novo turno
             </button>
-          )}
-        </div>
+            {visibleShifts.length > 0 && (
+              <button
+                type="button"
+                className="nf-text-danger"
+                onClick={clearSchedule}
+                aria-label={selected ? `Limpar todos os turnos de ${person?.name}` : "Limpar todos os turnos da equipa"}
+              >
+                <IconTrash size={16} />
+                {selected ? "Limpar turnos" : "Limpar horário"}
+              </button>
+            )}
+          </div>
+        )}
       </div>
       {generating && <GenerateScheduleModal staff={staff} onClose={() => setGenerating(false)} onDone={load} />}
 
@@ -361,7 +368,7 @@ export default function TeamSchedulePage() {
           lanes={lanes}
           items={items}
           onItemClick={(item) => {
-            if (item.shiftId) setEditing(shifts.find((s) => s.id === item.shiftId));
+            if (item.shiftId) { if (canEdit) setEditing(shifts.find((s) => s.id === item.shiftId)); }
             else if (item.activity === "session") setViewingSession(sessions.find((s) => s.id === item.sessionId));
           }}
           emptyText={

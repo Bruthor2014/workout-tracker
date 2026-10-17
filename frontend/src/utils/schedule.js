@@ -30,22 +30,25 @@ export const durationHours = (start, end) => (toMinutes(end) - toMinutes(start))
 // Dia da semana de hoje no formato da BD (1 = segunda).
 export const todayWeekday = () => ((new Date().getDay() + 6) % 7) + 1;
 
-// Tipos de aula de grupo.
+// Tipos de aula de grupo. Cores seguem a rampa de destaque do tema do
+// ginásio (var(--accent-*)) em vez de cores fixas, para o calendário
+// acompanhar as cores escolhidas pelo CEO.
 export const CLASS_KINDS = [
-  { value: "class", label: "Aula de grupo", color: "#8b5cf6", description: "Ex: cycling, pilates, body pump, HIIT." },
-  { value: "talk", label: "Palestra", color: "#0d9488", description: "Ex: palestra de nutrição, workshop." },
-  { value: "event", label: "Evento", color: "#f59e0b", description: "Ex: desafio, open day, avaliação de grupo." },
+  { value: "class", label: "Aula de grupo", color: "var(--accent-strong)", description: "Ex: cycling, pilates, body pump, HIIT." },
+  { value: "talk", label: "Palestra", color: "var(--accent-deep)", description: "Ex: palestra de nutrição, workshop." },
+  { value: "event", label: "Evento", color: "var(--accent-light)", description: "Ex: desafio, open day, avaliação de grupo." },
 ];
 
 export const classKind = (value) => CLASS_KINDS.find((k) => k.value === value) || CLASS_KINDS[0];
 
-// Atividades dos turnos da equipa.
+// Atividades dos turnos da equipa — mesma rampa do tema; "Outro" fica
+// neutro de propósito, como âncora visual entre os tons da cor principal.
 export const SHIFT_ACTIVITIES = [
-  { value: "floor", label: "Sala", color: "#3b82f6", description: "Acompanhar os membros na sala." },
-  { value: "class", label: "Aulas / estúdio", color: "#8b5cf6", description: "Bloco reservado para aulas ou estúdio." },
-  { value: "reception", label: "Receção", color: "#ec4899", description: "Atendimento e inscrições." },
-  { value: "assessments", label: "Avaliações", color: "#10b981", description: "Avaliações físicas e de composição corporal." },
-  { value: "admin", label: "Administrativo", color: "#f59e0b", description: "Planos, relatórios, reuniões." },
+  { value: "floor", label: "Sala", color: "var(--accent)", description: "Acompanhar os membros na sala." },
+  { value: "class", label: "Aulas / estúdio", color: "var(--accent-strong)", description: "Bloco reservado para aulas ou estúdio." },
+  { value: "reception", label: "Receção", color: "var(--accent-deep)", description: "Atendimento e inscrições." },
+  { value: "assessments", label: "Avaliações", color: "var(--accent-light)", description: "Avaliações físicas e de composição corporal." },
+  { value: "admin", label: "Administrativo", color: "rgba(var(--accent-strong-rgb), 0.55)", description: "Planos, relatórios, reuniões." },
   { value: "other", label: "Outro", color: "#94a3b8", description: "" },
 ];
 
@@ -53,5 +56,5 @@ export const shiftActivity = (value) => SHIFT_ACTIVITIES.find((a) => a.value ===
 
 // Sessões dos PTs com clientes (e consultas dos nutricionistas): horas fixas
 // que nenhum turno ou aula pode ocupar.
-export const SESSION_COLOR = "#06b6d4";
+export const SESSION_COLOR = "var(--accent)";
 export const sessionLabel = (role) => (role === "nutritionist" ? "Consulta" : "Sessão de PT");
