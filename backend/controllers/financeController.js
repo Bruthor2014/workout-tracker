@@ -73,37 +73,6 @@ async function listStaffFinance(req, res) {
   res.json(result.rows);
 }
 
-// GET /api/finance/weeks — semanas do mês corrente (ou ?month=YYYY-MM) com registos.
-async function listWeeks(req, res) {
-  const monthParam = req.query.month;
-  const monthStart = monthParam ? `${monthParam}-01` : null;
-
-  const result = await pool.query(
-    `SELECT pw.id, pw.staff_id, u.name AS staff_name, u.role::text AS staff_role,
-            pw.week_start, pw.hours_reception, pw.hours_sala, pw.hours_class, pw.pt_clients_count,
-            pw.absent_hours, pw.absent_deduction,
-            pw.notes, pw.confirmed, pw.confirmed_at,
-            cb.name AS confirmed_by_name,
-            COALESCE(sr.base_salary, 0)      AS base_salary,
-            COALESCE(sr.rate_reception_h, 0) AS rate_reception_h,
-            COALESCE(sr.rate_sala_h, 0)      AS rate_sala_h,
-            COALESCE(sr.rate_class_h, 0)     AS rate_class_h,
-            COALESCE(sr.rate_pt_month, 0)    AS rate_pt_month,
-            sr.gym_cut_pct,
-            sr.gym_cut_fixed
-       FROM payroll_weeks pw
-       JOIN users u ON u.id = pw.staff_id
-       LEFT JOIN users cb ON cb.id = pw.confirmed_by
-       LEFT JOIN staff_rates sr ON sr.staff_id = pw.staff_id AND sr.gym_id = pw.gym_id
-      WHERE pw.gym_id = $1
-        AND pw.week_start >= COALESCE($2::date, date_trunc('month', CURRENT_DATE))
-        AND pw.week_start <  COALESCE($2::date, date_trunc('month', CURRENT_DATE)) + INTERVAL '1 month'
-      ORDER BY pw.week_start DESC, u.name`,
-    [req.user.gymId, monthStart]
-  );
-  res.json(result.rows);
-}
-
 // PUT /api/finance/rates/:staffId — CEO define ou actualiza as taxas de um membro da equipa.
 async function upsertRates(req, res) {
   const staffId = Number(req.params.staffId);
@@ -129,51 +98,12 @@ async function upsertRates(req, res) {
   res.json({ message: "Taxas actualizadas." });
 }
 
-// POST /api/finance/weeks — cria ou actualiza um registo semanal.
-async function upsertWeek(req, res) {
-  const { staff_id, week_start, hours_reception, hours_sala, hours_class, pt_clients_count, absent_hours, absent_deduction, notes } = req.body;
-  if (!staff_id || !week_start) return res.status(400).json({ message: "staff_id e week_start são obrigatórios." });
-
-  const staff = await pool.query(
-    "SELECT id FROM users WHERE id = $1 AND gym_id = $2",
-    [Number(staff_id), req.user.gymId]
-  );
-  if (!staff.rows[0]) return res.status(404).json({ message: "Staff não encontrado." });
-
-  const result = await pool.query(
-    `INSERT INTO payroll_weeks (staff_id, gym_id, week_start, hours_reception, hours_sala, hours_class, pt_clients_count, absent_hours, absent_deduction, notes)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-     ON CONFLICT (staff_id, week_start)
-     DO UPDATE SET hours_reception = $4, hours_sala = $5, hours_class = $6, pt_clients_count = $7,
-                   absent_hours = $8, absent_deduction = $9,
-                   notes = $10, confirmed = false, confirmed_by = null, confirmed_at = null
-     RETURNING id`,
-    [Number(staff_id), req.user.gymId, week_start,
-     hours_reception ?? 0, hours_sala ?? 0, hours_class ?? 0,
-     pt_clients_count ?? 0, absent_hours ?? 0, absent_deduction ?? 0, notes || null]
-  );
-  res.status(201).json({ id: result.rows[0].id });
-}
-
-// POST /api/finance/weeks/:id/confirm — CEO confirma um registo semanal.
-async function confirmWeek(req, res) {
-  const weekId = Number(req.params.id);
-  const row = await pool.query("SELECT id, gym_id FROM payroll_weeks WHERE id = $1", [weekId]);
-  if (!row.rows[0] || row.rows[0].gym_id !== req.user.gymId) return res.status(404).json({ message: "Registo não encontrado." });
-
-  await pool.query(
-    "UPDATE payroll_weeks SET confirmed = true, confirmed_by = $1, confirmed_at = now() WHERE id = $2",
-    [req.user.id, weekId]
-  );
-  res.json({ message: "Confirmado." });
-}
-
 // GET /api/finance/my?month=YYYY-MM — PT vê o seu próprio resumo mensal.
 async function getMyFinance(req, res) {
   const monthParam = req.query.month;
   const monthStart = monthParam ? `${monthParam}-01` : null;
 
-  const [ratesRow, weeksRow, absRow, extClientsRow] = await Promise.all([
+  const [ratesRow, absRow, extClientsRow] = await Promise.all([
     pool.query(
       `SELECT COALESCE(base_salary,0) AS base_salary,
               COALESCE(rate_reception_h,0) AS rate_reception_h,
@@ -183,16 +113,6 @@ async function getMyFinance(req, res) {
               gym_cut_pct, gym_cut_fixed
          FROM staff_rates WHERE staff_id=$1 AND gym_id=$2`,
       [req.user.id, req.user.gymId]
-    ),
-    pool.query(
-      `SELECT week_start, hours_sala, hours_reception, hours_class, pt_clients_count,
-              absent_hours, absent_deduction
-         FROM payroll_weeks
-        WHERE staff_id=$1 AND gym_id=$2
-          AND week_start >= COALESCE($3::date, date_trunc('month', CURRENT_DATE))
-          AND week_start <  COALESCE($3::date, date_trunc('month', CURRENT_DATE)) + INTERVAL '1 month'
-        ORDER BY week_start`,
-      [req.user.id, req.user.gymId, monthStart]
     ),
     // Presenças: todos os turnos do mês até hoje, com status da receção
     pool.query(
@@ -243,7 +163,6 @@ async function getMyFinance(req, res) {
 
   res.json({
     rates: ratesRow.rows[0] || null,
-    weeks: weeksRow.rows,
     attendance: absRow.rows,
     external_clients: extClientsRow.rows,
   });
@@ -342,7 +261,7 @@ async function getMyPayments(req, res) {
 }
 
 module.exports = {
-  listStaffFinance, listWeeks, upsertRates, upsertWeek, confirmWeek,
+  listStaffFinance, upsertRates,
   getMyFinance, listPayments, createPayment, deletePayment, getMyPayments,
   updateExtClientFee,
 };

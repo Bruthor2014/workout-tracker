@@ -56,6 +56,7 @@ function PlansMarketingView() {
 function PlansAuthedView() {
   const [plans, setPlans] = useState([]);
   const [exercises, setExercises] = useState([]);
+  const [records, setRecords] = useState(() => new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -71,6 +72,11 @@ function PlansAuthedView() {
   useEffect(() => {
     loadPlans();
     apiRequest("/exercises").then(setExercises).catch(() => {});
+    // Recorde (maior peso) de cada exercício, para mostrar junto de cada
+    // exercício do plano — mesmo endpoint usado ao registar um treino.
+    apiRequest("/sessions/records")
+      .then((rows) => setRecords(new Map(rows.map((r) => [String(r.exercise_id), r]))))
+      .catch(() => {});
   }, []);
 
   return (
@@ -92,12 +98,15 @@ function PlansAuthedView() {
       {showForm && (
         <NewPlanForm
           exercises={exercises}
+          records={records}
           submitPath="/plans"
           onCancel={() => setShowForm(false)}
           onCreated={() => {
             setShowForm(false);
             loadPlans();
           }}
+          onExerciseCreated={(newEx) => setExercises((prev) => [...prev, newEx])}
+          onExerciseDeleted={(id) => setExercises((prev) => prev.filter((e) => e.id !== id))}
         />
       )}
 
@@ -112,7 +121,17 @@ function PlansAuthedView() {
 
       <div className="plan-list">
         {plans.map((plan) => (
-          <PlanCard key={plan.id} plan={plan} exercises={exercises} editable canStart onChanged={loadPlans} />
+          <PlanCard
+            key={plan.id}
+            plan={plan}
+            exercises={exercises}
+            records={records}
+            editable
+            canStart
+            onChanged={loadPlans}
+            onExerciseCreated={(newEx) => setExercises((prev) => [...prev, newEx])}
+            onExerciseDeleted={(id) => setExercises((prev) => prev.filter((e) => e.id !== id))}
+          />
         ))}
       </div>
     </div>

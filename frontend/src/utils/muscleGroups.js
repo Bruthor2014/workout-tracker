@@ -30,7 +30,12 @@ const MUSCLE_GROUP_VISUALS = {
 // repetições e peso — ficam fora do volume e dos recordes.
 export const CARDIO_GROUP = "Cardio";
 
-const DEFAULT_VISUAL = { icon: IconDumbbell, color: "#8b5cf6" };
+// Lista fixa de grupos musculares — usada no formulário de criar exercício
+// pessoal (ver ExercisePicker.jsx), para ficar consistente com os filtros e
+// ícones já existentes em vez de aceitar texto livre.
+export const MUSCLE_GROUP_NAMES = Object.keys(MUSCLE_GROUP_VISUALS);
+
+const DEFAULT_VISUAL = { icon: IconDumbbell, color: "#8a8d91" };
 const FULL_BODY_VISUAL = { icon: IconFullBody, color: "#d946ef" };
 
 const LOWER_BODY = ["Pernas", "Glúteos"];

@@ -22,13 +22,24 @@ const gymRoutes = require("./routes/gymRoutes");
 const financeRoutes = require("./routes/financeRoutes");
 const occupancyRoutes = require("./routes/occupancyRoutes");
 const attendanceRoutes = require("./routes/attendanceRoutes");
+const friendRoutes = require("./routes/friendRoutes");
 const { startClassChecker } = require("./services/classChecker");
 
 const app = express();
 
+// Atrás de um proxy (Cloud Run, Render, etc.) só há 1 hop até à app —
+// sem isto, express-rate-limit rejeita os pedidos por desconfiar do
+// X-Forwarded-For (vê um IP que não é o do cliente real). Em dev local não
+// há proxy nenhum, mas "trust proxy" aqui não faz mal nesse caso.
+app.set("trust proxy", 1);
+
 // Gzip all responses (cuts bandwidth ~70% for JSON APIs)
 app.use(compression());
-app.use(cors());
+// Em produção, só os domínios em ALLOWED_ORIGINS (separados por vírgula —
+// ver .env.example) podem chamar a API; sem essa variável definida (dev
+// local), fica aberto a qualquer origem, como sempre foi.
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",").map((o) => o.trim());
+app.use(cors(allowedOrigins ? { origin: allowedOrigins } : undefined));
 app.use(express.json());
 
 // Rate limiting: 500 req/15 min per IP globally; tighter on auth endpoints
@@ -57,6 +68,7 @@ app.use("/api/gym", gymRoutes);
 app.use("/api/finance", financeRoutes);
 app.use("/api/occupancy", occupancyRoutes);
 app.use("/api/attendance", attendanceRoutes);
+app.use("/api/friends", friendRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);

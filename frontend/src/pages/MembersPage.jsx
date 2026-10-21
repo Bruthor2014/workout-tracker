@@ -9,7 +9,10 @@ import { useAuth } from "../context/AuthContext";
 import { IconCalendar, IconSave, IconWeightStack } from "../components/Icons";
 import { ROLE_LABELS, ROLE_COLORS } from "../utils/roles";
 
-// Rececionista adiciona um novo sócio com apenas o email.
+// Rececionista liga um sócio já registado ao ginásio, pelo email — a
+// pessoa tem de se ter registado sozinha primeiro em /register (fica sem
+// ginásio até ser "reclamada"). Nunca se cria aqui uma conta nova; sem
+// conta prévia, o backend devolve um erro a pedir para se registar.
 function AddMemberModal({ onClose, onCreated }) {
   const [email, setEmail] = useState("");
   const [result, setResult] = useState(null);
@@ -22,6 +25,7 @@ function AddMemberModal({ onClose, onCreated }) {
     try {
       const person = await apiRequest("/members", { method: "POST", body: { email } });
       setResult(person);
+      onCreated();
     } catch (err) { setError(err.message); }
     finally { setSaving(false); }
   }
@@ -33,18 +37,8 @@ function AddMemberModal({ onClose, onCreated }) {
         {result ? (
           <>
             <p style={{ marginBottom: 4 }}>
-              <strong>{result.name}</strong> foi adicionado ao ginásio.
+              <strong>{result.name}</strong> foi associado a este ginásio.
             </p>
-            {result.temp_password && (
-              <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(255,255,255,0.06)",
-                fontSize: "0.88rem", marginTop: 8 }}>
-                <p className="text-secondary" style={{ margin: "0 0 4px", fontSize: "0.78rem" }}>Password temporária</p>
-                <strong style={{ fontFamily: "monospace", fontSize: "1rem" }}>{result.temp_password}</strong>
-                <p className="text-secondary" style={{ margin: "6px 0 0", fontSize: "0.75rem" }}>
-                  Dá esta password ao novo sócio para o primeiro login.
-                </p>
-              </div>
-            )}
             <div className="schedule-form-actions" style={{ marginTop: 14 }}>
               <button type="button" className="glass-button glass-button-secondary" onClick={onClose}>Fechar</button>
               <button type="button" className="glass-button" onClick={() => { setResult(null); setEmail(""); }}>Adicionar outro</button>
@@ -52,11 +46,14 @@ function AddMemberModal({ onClose, onCreated }) {
           </>
         ) : (
           <form onSubmit={handleSubmit}>
-            <label style={{ display: "block", marginBottom: 16 }}>
+            <label style={{ display: "block", marginBottom: 6 }}>
               <span className="log-label">Email do sócio</span>
               <input className="glass-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                 placeholder="nome@email.com" required autoFocus />
             </label>
+            <p className="text-secondary" style={{ margin: "0 0 16px", fontSize: "0.8rem" }}>
+              A pessoa já tem de ter criado a conta em Registar — isto só a liga a este ginásio, não cria uma conta nova.
+            </p>
             {error && <p className="error-text">{error}</p>}
             <div className="schedule-form-actions">
               <button type="button" className="glass-button glass-button-secondary" onClick={onClose}>Cancelar</button>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import GlassCard from "../components/GlassCard";
+import GoogleSignInButton from "../components/GoogleSignInButton";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 
@@ -32,11 +33,20 @@ export default function LoginPage() {
     }
   }
 
+  // O mesmo endpoint (POST /api/auth/google, chamado pelo próprio
+  // GoogleSignInButton) trata login E registo — quem ainda não tinha
+  // conta fica com uma criada na hora, já confirmada.
+  function handleGoogleAuthenticated(data) {
+    login(data.token, data.user);
+  }
+
   return (
     <div className="page-center">
       <GlassCard className="auth-card">
         <h1>Entrar</h1>
         <p className="text-secondary">Acede à tua conta para veres os teus treinos.</p>
+        <GoogleSignInButton onAuthenticated={handleGoogleAuthenticated} onError={setError} />
+        <div className="auth-divider"><span>ou</span></div>
         <form onSubmit={handleSubmit}>
           <div>
             <label className="field-label" htmlFor="email">

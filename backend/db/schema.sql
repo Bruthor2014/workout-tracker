@@ -1,4 +1,4 @@
--- Workout Tracker — schema Fase 1
+-- Ironbound — schema Fase 1
 -- Multi-tenant (vários ginásios), preparado para Fase 2 (admins) e Fase 3 (progresso)
 -- Ver explicação das decisões de design na documentação do projeto.
 
@@ -38,13 +38,25 @@ CREATE TYPE user_role AS ENUM (
 
 CREATE TABLE users (
     id             SERIAL PRIMARY KEY,
-    gym_id         INTEGER NOT NULL REFERENCES gyms(id),
+    -- Nullable desde a migration 012: quem se regista sozinho (ver
+    -- authController.js register()) fica sem ginásio até ser "reclamado"
+    -- por um rececionista (ver createPerson em memberController.js).
+    gym_id         INTEGER REFERENCES gyms(id),
     name           VARCHAR(150) NOT NULL,
     email          VARCHAR(255) NOT NULL UNIQUE,
-    password_hash  VARCHAR(255) NOT NULL,
+    -- Nullable para contas só-Google, que não têm password própria.
+    password_hash  VARCHAR(255),
     role           user_role NOT NULL DEFAULT 'member',
     avatar_url     TEXT,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Login/registo com Google (ver authController.js googleAuth()).
+    google_id      VARCHAR(255) UNIQUE,
+    -- Confirmação de email: contas Google e criadas por staff nascem já
+    -- confirmadas; só o registo normal (sem Google) nasce por confirmar,
+    -- com um token de confirmação de validade limitada.
+    email_verified BOOLEAN NOT NULL DEFAULT true,
+    verification_token               VARCHAR(64),
+    verification_token_expires_at    TIMESTAMPTZ
 );
 
 -- Subscrições de serviços de um membro (PT / plano de nutrição / a própria
@@ -69,7 +81,10 @@ CREATE TABLE member_subscriptions (
     started_at         DATE NOT NULL DEFAULT CURRENT_DATE,
     ended_at           DATE,
     is_active          BOOLEAN NOT NULL DEFAULT true,
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Pago até esta data — "em dia" se >= hoje, "em atraso" se < hoje. Só
+    -- um aviso visual no perfil, não mexe em contagens nem em acessos.
+    paid_until         DATE DEFAULT CURRENT_DATE
 );
 
 -- Impede duas subscrições ativas do mesmo tipo para o mesmo membro
@@ -77,19 +92,38 @@ CREATE UNIQUE INDEX idx_one_active_subscription_per_type
     ON member_subscriptions(member_id, service_type)
     WHERE is_active;
 
+-- Preço de cada serviço, por agora um valor fixo por ginásio — NÃO varia
+-- por membro/plano ainda (limitação conhecida, ver PROGRESS.txt: no mundo
+-- real diferentes membros podem ter preços diferentes consoante o plano
+-- que negociaram).
+CREATE TABLE gym_service_prices (
+    id              SERIAL PRIMARY KEY,
+    gym_id          INTEGER NOT NULL REFERENCES gyms(id) ON DELETE CASCADE,
+    service_type    service_type NOT NULL,
+    price_cents     INTEGER NOT NULL,
+    billing_period  VARCHAR(20) NOT NULL DEFAULT 'monthly',
+    UNIQUE (gym_id, service_type)
+);
+
 -- Catálogo de exercícios (por ginásio, não global)
 -- image_url aponta para uma imagem ilustrativa do exercício (ex: a API
 -- pública da wger.de, wger.de/api/v2/exerciseimage/) — não é obrigatório;
 -- o picker de exercícios no frontend usa um pictograma por grupo muscular
 -- como alternativa quando não há imagem.
+-- owner_id NULL = exercício partilhado do catálogo do ginásio; owner_id
+-- definido = exercício pessoal, só visível para quem o criou (ver
+-- exerciseController.js). gym_id é nullable pelo mesmo motivo que em
+-- users: contas sem ginásio também podem ter os seus próprios exercícios.
 CREATE TABLE exercises (
     id            SERIAL PRIMARY KEY,
-    gym_id        INTEGER NOT NULL REFERENCES gyms(id),
+    gym_id        INTEGER REFERENCES gyms(id),
+    owner_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
     name          VARCHAR(150) NOT NULL,
     muscle_group  VARCHAR(100),
     image_url     TEXT,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE INDEX idx_exercises_owner ON exercises(owner_id);
 
 -- Planos de treino
 CREATE TABLE workout_plans (
@@ -111,19 +145,31 @@ CREATE TABLE plan_days (
     order_index  INTEGER NOT NULL DEFAULT 0
 );
 
--- Exercícios dentro de um dia de um plano (template: o que deve ser feito)
+-- Exercícios dentro de um dia de um plano (template: o que deve ser feito).
+-- As séries em si (quantas, reps/carga de cada uma) vivem em
+-- plan_exercise_sets — uma linha por série, para dar para variar entre
+-- séries (ex: pirâmide), tal como set_logs guarda o que foi feito.
 CREATE TABLE plan_exercises (
     id           SERIAL PRIMARY KEY,
     plan_day_id  INTEGER NOT NULL REFERENCES plan_days(id) ON DELETE CASCADE,
     exercise_id  INTEGER NOT NULL REFERENCES exercises(id),
     order_index  INTEGER NOT NULL DEFAULT 0,
-    target_sets  INTEGER,
-    target_reps  INTEGER,
+    notes        TEXT,
+    -- Técnica planeada (ver set_logs.set_type mais abaixo); a registar o
+    -- treino a partir deste dia, fica pré-selecionada.
+    set_type     VARCHAR(20) NOT NULL DEFAULT 'normal'
+                 CHECK (set_type IN ('normal', 'drop', 'rest_pause', 'cluster', 'superset', 'pyramid', 'failure'))
+);
+
+CREATE TABLE plan_exercise_sets (
+    id                SERIAL PRIMARY KEY,
+    plan_exercise_id  INTEGER NOT NULL REFERENCES plan_exercises(id) ON DELETE CASCADE,
+    set_number        INTEGER NOT NULL,
+    target_reps       INTEGER,
     -- Máximo quando as reps alvo são um intervalo (ex: 8-12 -> 8 e 12);
     -- NULL quando é um número só.
-    target_reps_max INTEGER,
-    target_load  NUMERIC(6,2),
-    notes        TEXT
+    target_reps_max   INTEGER,
+    target_load       NUMERIC(6,2)
 );
 
 -- Sessões de treino (um treino/visita concreta, numa data)
@@ -158,6 +204,23 @@ CREATE TABLE set_logs (
                        CHECK (set_type IN ('normal', 'drop', 'rest_pause', 'cluster', 'superset', 'pyramid', 'failure')),
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Sistema de amigos: cada utilizador tem um código próprio para partilhar
+-- (distinto do invite_code, que é para onboarding de clientes de um
+-- PT/nutricionista). Seguir é direto, sem aprovação, e funciona entre
+-- ginásios diferentes.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS friend_code VARCHAR(10) UNIQUE;
+
+CREATE TABLE friendships (
+    id           SERIAL PRIMARY KEY,
+    follower_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    followee_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (follower_id, followee_id),
+    CHECK (follower_id <> followee_id)
+);
+CREATE INDEX idx_friendships_follower ON friendships(follower_id);
+CREATE INDEX idx_friendships_followee ON friendships(followee_id);
 
 -- Registos corporais de um membro (peso e composição corporal), para o
 -- gráfico de evolução no perfil. Só staff (PT/admin/nutricionista) regista
@@ -338,6 +401,47 @@ CREATE TABLE staff_attendance (
 CREATE INDEX idx_attendance_gym_date ON staff_attendance(gym_id, shift_date);
 CREATE INDEX idx_attendance_staff_date ON staff_attendance(staff_id, shift_date);
 
+-- Taxas de remuneração por staff×ginásio (salário base + taxas horárias
+-- por tipo de trabalho + taxa mensal por cliente de PT + retenção do
+-- ginásio). Também tinha ficado de fora do schema.sql.
+CREATE TABLE staff_rates (
+    staff_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    gym_id            INTEGER NOT NULL REFERENCES gyms(id) ON DELETE CASCADE,
+    base_salary       DECIMAL(10,2) NOT NULL DEFAULT 0,
+    rate_reception_h  DECIMAL(10,2) NOT NULL DEFAULT 0,
+    rate_sala_h       DECIMAL(10,2) NOT NULL DEFAULT 0,
+    rate_class_h      DECIMAL(10,2) NOT NULL DEFAULT 0,
+    rate_pt_month     DECIMAL(10,2) NOT NULL DEFAULT 0,
+    gym_cut_pct       DECIMAL(5,2),
+    gym_cut_fixed     DECIMAL(10,2),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (staff_id, gym_id)
+);
+
+-- Pagamentos mensais confirmados pelo CEO (um por staff×mês). Nunca tinha
+-- chegado a ser criada em nenhuma migração nem no schema.sql — só
+-- existia numa BD viva de outra máquina (ver migration 022).
+CREATE TABLE monthly_payments (
+    id                SERIAL PRIMARY KEY,
+    staff_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    gym_id            INTEGER NOT NULL REFERENCES gyms(id) ON DELETE CASCADE,
+    month_year        DATE NOT NULL,
+    hours_sala        NUMERIC(8,2) NOT NULL DEFAULT 0,
+    hours_reception   NUMERIC(8,2) NOT NULL DEFAULT 0,
+    hours_class       NUMERIC(8,2) NOT NULL DEFAULT 0,
+    pt_clients_count  INTEGER NOT NULL DEFAULT 0,
+    absent_hours      NUMERIC(8,2) NOT NULL DEFAULT 0,
+    gross             NUMERIC(10,2) NOT NULL DEFAULT 0,
+    gym_cut           NUMERIC(10,2) NOT NULL DEFAULT 0,
+    absent_deduction  NUMERIC(10,2) NOT NULL DEFAULT 0,
+    net               NUMERIC(10,2) NOT NULL DEFAULT 0,
+    confirmed_by      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    notes             TEXT,
+    paid_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (staff_id, month_year)
+);
+CREATE INDEX idx_monthly_payments_gym_month ON monthly_payments(gym_id, month_year);
+
 -- Sessões semanais de um PT (ou consultas de um nutricionista) com um
 -- cliente seu. Os turnos, as aulas e o gerador de horários não podem
 -- coincidir com estas horas (ver utils/staffBusy.js).
@@ -363,6 +467,7 @@ CREATE INDEX idx_body_metrics_member_date ON body_metrics(member_id, recorded_at
 CREATE INDEX idx_body_measurements_metric ON body_measurements(body_metric_id);
 CREATE INDEX idx_plan_days_plan ON plan_days(plan_id);
 CREATE INDEX idx_plan_exercises_day ON plan_exercises(plan_day_id);
+CREATE INDEX idx_plan_exercise_sets_pe ON plan_exercise_sets(plan_exercise_id);
 CREATE INDEX idx_meal_slots_plan ON meal_slots(nutrition_plan_id);
 CREATE INDEX idx_meal_options_slot ON meal_options(meal_slot_id);
 CREATE INDEX idx_meal_option_items_option ON meal_option_items(meal_option_id);
@@ -372,6 +477,12 @@ CREATE INDEX idx_messages_recipient ON messages(recipient_id, created_at);
 -- Ginásio de exemplo (id 1) — tem de existir antes do catálogo abaixo, que o
 -- referencia, e é o DEFAULT_GYM_ID usado pelo registo (ver backend/.env).
 INSERT INTO gyms (name) VALUES ('Ginásio Demo');
+
+-- Preços de arranque para o ginásio de exemplo.
+INSERT INTO gym_service_prices (gym_id, service_type, price_cents, billing_period) VALUES
+    (1, 'gym_membership', 3000, 'monthly'),
+    (1, 'personal_training', 4500, 'monthly'),
+    (1, 'nutrition_plan', 2500, 'monthly');
 
 -- Catálogo inicial de exercícios para o ginásio de exemplo (gym_id 1) — dá
 -- ao picker de exercícios (filtro por grupo muscular + imagem) algo com que

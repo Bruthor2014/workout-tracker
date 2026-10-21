@@ -16,26 +16,50 @@ async function findMember(memberId, gymId) {
   return result.rows[0];
 }
 
+// "Em dia" (paid_until >= hoje) vs "em atraso" (paid_until < hoje) — só um
+// aviso visual no perfil, não mexe em contagens/estatísticas nem em
+// acessos (ver PROGRESS.txt). null quando não há pagamento formal a
+// acompanhar (ex: ligação a coach externo, sem preço configurado).
+function paymentStatus(paidUntil) {
+  if (!paidUntil) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(paidUntil) >= today ? "paid" : "late";
+}
+
+// `pg` devolve colunas DATE como Date (meia-noite UTC) — sem isto,
+// res.json() serializava com hora e "Z", partindo o parsing no frontend
+// (new Date(`${dateKey}T00:00:00`)).
+function toDateStr(d) {
+  return d ? new Date(d).toISOString().slice(0, 10) : null;
+}
+
 // Estado mais recente de cada tipo de subscrição de um membro (PT /
 // nutrição), mesmo quando nunca houve nenhuma — usado tanto pela vista de
-// staff como pela auto-consulta do próprio membro.
-async function fetchSubscriptionsForMember(memberId) {
+// staff como pela auto-consulta do próprio membro. `gymId` só serve para ir
+// buscar o preço do serviço nesse ginásio (sem ginásio, fica sem preço).
+async function fetchSubscriptionsForMember(memberId, gymId) {
   const result = await pool.query(
     `SELECT st.service_type,
             COALESCE(sub.is_active, false) AS is_active,
             sub.assigned_staff_id,
             staff.name AS assigned_staff_name,
-            staff.role AS assigned_staff_role
+            staff.role AS assigned_staff_role,
+            sub.paid_until,
+            price.price_cents,
+            price.billing_period
        FROM (VALUES ('personal_training'), ('nutrition_plan'), ('gym_membership')) AS st(service_type)
        LEFT JOIN LATERAL (
-         SELECT is_active, assigned_staff_id
+         SELECT is_active, assigned_staff_id, paid_until
            FROM member_subscriptions
           WHERE member_id = $1 AND service_type = st.service_type::service_type
           ORDER BY created_at DESC
           LIMIT 1
        ) sub ON true
-       LEFT JOIN users staff ON staff.id = sub.assigned_staff_id`,
-    [memberId]
+       LEFT JOIN users staff ON staff.id = sub.assigned_staff_id
+       LEFT JOIN gym_service_prices price
+         ON price.gym_id = $2 AND price.service_type = st.service_type::service_type`,
+    [memberId, gymId]
   );
 
   const byService = {};
@@ -45,6 +69,10 @@ async function fetchSubscriptionsForMember(memberId) {
       assigned_staff_id: row.assigned_staff_id,
       assigned_staff_name: row.assigned_staff_name,
       assigned_staff_role: row.assigned_staff_role,
+      price_cents: row.price_cents,
+      billing_period: row.billing_period,
+      next_renewal_date: row.is_active && row.price_cents != null ? toDateStr(row.paid_until) : null,
+      payment_status: row.is_active && row.price_cents != null ? paymentStatus(row.paid_until) : null,
     };
   }
   return byService;
@@ -56,14 +84,14 @@ async function getMemberSubscriptions(req, res) {
   if (!member) {
     return res.status(404).json({ message: "Membro não encontrado." });
   }
-  res.json(await fetchSubscriptionsForMember(req.params.id));
+  res.json(await fetchSubscriptionsForMember(req.params.id, req.user.gymId));
 }
 
 // GET /api/members/me/subscriptions — o próprio membro vê as suas
 // subscrições e quem lhe está atribuído. Se não houver subscrição formal
 // mas existir uma ligação de cliente externo, usa-a para preencher o campo.
 async function getMySubscriptions(req, res) {
-  const subs = await fetchSubscriptionsForMember(req.user.id);
+  const subs = await fetchSubscriptionsForMember(req.user.id, req.user.gymId);
 
   // Enriquecer com coaches externos quando não há subscrição formal.
   if (!subs.personal_training.is_active || !subs.nutrition_plan.is_active) {
@@ -86,6 +114,11 @@ async function getMySubscriptions(req, res) {
           assigned_staff_name: row.coach_name,
           assigned_staff_role: row.coach_role,
           is_external: true,
+          // Cliente externo: sem subscrição/preço formal no ginásio.
+          price_cents: null,
+          billing_period: null,
+          next_renewal_date: null,
+          payment_status: null,
         };
       }
     }
@@ -148,6 +181,14 @@ async function updateMemberSubscription(req, res) {
     await pool.query(`UPDATE member_subscriptions SET is_active = false, ended_at = CURRENT_DATE WHERE id = $1`, [
       activeRow.id,
     ]);
+    // Desativar a inscrição no ginásio (ao contrário de PT/nutrição, que só
+    // tiram o staff atribuído) tira mesmo a pessoa do ginásio — pedido
+    // explícito do utilizador. Para voltar a entrar, usa-se o fluxo de
+    // "Novo sócio" (createPerson), que volta a ligar a conta e a ativar a
+    // inscrição.
+    if (serviceType === "gym_membership") {
+      await pool.query(`UPDATE users SET gym_id = NULL WHERE id = $1`, [req.params.id]);
+    }
   }
 
   // As sessões semanais com um PT/nutricionista que deixou de estar

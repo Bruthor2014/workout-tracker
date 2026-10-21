@@ -17,7 +17,7 @@ async function attachDaysToPlans(plans) {
   const dayIds = days.map((d) => d.id);
   const exercisesResult = dayIds.length
     ? await pool.query(
-        `SELECT pe.id, pe.plan_day_id, pe.order_index, pe.target_sets, pe.target_reps, pe.target_reps_max, pe.target_load,
+        `SELECT pe.id, pe.plan_day_id, pe.order_index, pe.set_type,
                 e.id AS exercise_id, e.name AS exercise_name, e.muscle_group, e.image_url
            FROM plan_exercises pe
            JOIN exercises e ON e.id = pe.exercise_id
@@ -26,6 +26,26 @@ async function attachDaysToPlans(plans) {
         [dayIds]
       )
     : { rows: [] };
+
+  const exerciseIds = exercisesResult.rows.map((row) => row.id);
+  const setsResult = exerciseIds.length
+    ? await pool.query(
+        `SELECT plan_exercise_id, set_number, target_reps, target_reps_max, target_load
+           FROM plan_exercise_sets
+          WHERE plan_exercise_id = ANY($1)
+          ORDER BY plan_exercise_id, set_number`,
+        [exerciseIds]
+      )
+    : { rows: [] };
+  const setsByExercise = new Map();
+  for (const row of setsResult.rows) {
+    if (!setsByExercise.has(row.plan_exercise_id)) setsByExercise.set(row.plan_exercise_id, []);
+    setsByExercise.get(row.plan_exercise_id).push({
+      target_reps: row.target_reps,
+      target_reps_max: row.target_reps_max,
+      target_load: row.target_load,
+    });
+  }
 
   const exercisesByDay = new Map();
   for (const row of exercisesResult.rows) {
@@ -37,10 +57,8 @@ async function attachDaysToPlans(plans) {
       muscle_group: row.muscle_group,
       image_url: row.image_url,
       order_index: row.order_index,
-      target_sets: row.target_sets,
-      target_reps: row.target_reps,
-      target_reps_max: row.target_reps_max,
-      target_load: row.target_load,
+      set_type: row.set_type,
+      sets: setsByExercise.get(row.id) || [],
     });
   }
 
@@ -115,17 +133,30 @@ async function insertDaysAndExercises(client, planId, days) {
   }
 }
 
+// Mesmas técnicas de set_logs.set_type (ver utils/setTypes.js no frontend).
+const SET_TYPES = ["normal", "drop", "rest_pause", "cluster", "superset", "pyramid", "failure"];
+
 async function insertDayExercises(client, dayId, exercises) {
   for (let i = 0; i < exercises.length; i++) {
-    const { exercise_id, target_sets, target_reps, target_reps_max, target_load } = exercises[i];
-    // Um "intervalo" com mínimo = máximo (ex: 10-10) é só um número.
-    const repsMax = target_reps_max && target_reps_max !== target_reps ? target_reps_max : null;
-    await client.query(
-      `INSERT INTO plan_exercises
-         (plan_day_id, exercise_id, order_index, target_sets, target_reps, target_reps_max, target_load)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [dayId, exercise_id, i, target_sets || null, target_reps || null, repsMax, target_load || null]
+    const { exercise_id, set_type, sets } = exercises[i];
+    const peResult = await client.query(
+      `INSERT INTO plan_exercises (plan_day_id, exercise_id, order_index, set_type)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id`,
+      [dayId, exercise_id, i, SET_TYPES.includes(set_type) ? set_type : "normal"]
     );
+    const planExerciseId = peResult.rows[0].id;
+
+    for (let s = 0; s < sets.length; s++) {
+      const { target_reps, target_reps_max, target_load } = sets[s];
+      // Um "intervalo" com mínimo = máximo (ex: 10-10) é só um número.
+      const repsMax = target_reps_max && target_reps_max !== target_reps ? target_reps_max : null;
+      await client.query(
+        `INSERT INTO plan_exercise_sets (plan_exercise_id, set_number, target_reps, target_reps_max, target_load)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [planExerciseId, s + 1, target_reps || null, repsMax, target_load || null]
+      );
+    }
   }
 }
 
@@ -159,15 +190,20 @@ function dayError(day) {
   if (!day || !day.name || !Array.isArray(day.exercises) || day.exercises.length === 0) {
     return "Cada dia precisa de nome e pelo menos um exercício.";
   }
-  // Reps alvo como intervalo (ex: 8-12): target_reps é o mínimo e
-  // target_reps_max o máximo — o máximo só faz sentido com mínimo, e não
-  // pode ser menor que ele.
   for (const ex of day.exercises) {
-    if (ex.target_reps_max == null) continue;
-    const min = Number(ex.target_reps);
-    const max = Number(ex.target_reps_max);
-    if (!Number.isInteger(min) || !Number.isInteger(max) || min < 1 || max < min) {
-      return "Intervalo de reps inválido (ex: 8-12, com o máximo maior que o mínimo).";
+    if (!Array.isArray(ex.sets) || ex.sets.length === 0) {
+      return "Cada exercício precisa de pelo menos uma série.";
+    }
+    // Reps alvo como intervalo (ex: 8-12): target_reps é o mínimo e
+    // target_reps_max o máximo — o máximo só faz sentido com mínimo, e não
+    // pode ser menor que ele.
+    for (const set of ex.sets) {
+      if (set.target_reps_max == null) continue;
+      const min = Number(set.target_reps);
+      const max = Number(set.target_reps_max);
+      if (!Number.isInteger(min) || !Number.isInteger(max) || min < 1 || max < min) {
+        return "Intervalo de reps inválido (ex: 8-12, com o máximo maior que o mínimo).";
+      }
     }
   }
   return null;

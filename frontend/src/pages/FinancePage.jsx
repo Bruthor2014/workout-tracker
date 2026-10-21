@@ -232,101 +232,70 @@ function StaffMonthModal({ staffId, staffName, month, onClose }) {
   );
 }
 
-// ─── Modal confirmação de pagamento mensal ──────────────────────────────────
-function PayMonthModal({ staffList, month, onClose, onSaved }) {
-  const [ptClients, setPtClients] = useState(() => {
-    const init = {};
-    staffList.forEach((s) => { init[s.id] = String(s.month_gym_clients || 0); });
-    return init;
-  });
+// ─── Modal confirmação de pagamento — um membro de cada vez ────────────────
+function PayStaffModal({ staff, month, alreadyPaid, onClose, onSaved }) {
+  const [ptClients, setPtClients] = useState(String(staff.month_gym_clients || 0));
   const [saving, setSaving] = useState(false);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
 
-  // Only include staff that have any attendance or a base salary
-  const totals = staffList
-    .filter((s) =>
-      Number(s.month_hours_sala) > 0 ||
-      Number(s.month_hours_reception) > 0 ||
-      Number(s.month_hours_class) > 0 ||
-      Number(ptClients[s.id]) > 0 ||
-      Number(s.base_salary) > 0
-    )
-    .map((s) => {
-      const clients = Number(ptClients[s.id] || 0);
-      const { gross, cut, net } = calcEarnings(s, clients);
-      return { s, gross, cut, net, clients };
-    });
+  const clients = Number(ptClients || 0);
+  const { gross, cut, net } = calcEarnings(staff, clients);
 
   async function handlePay() {
     setSaving(true); setError("");
     try {
-      for (const t of totals) {
-        await apiRequest("/finance/payments", {
-          method: "POST",
-          body: {
-            staff_id: t.s.id, month,
-            hours_sala:       Number(t.s.month_hours_sala),
-            hours_reception:  Number(t.s.month_hours_reception),
-            hours_class:      Number(t.s.month_hours_class),
-            pt_clients_count: t.clients,
-            absent_hours: 0,
-            gross: t.gross, gym_cut: t.cut, absent_deduction: 0, net: t.net,
-            notes: notes || null,
-          },
-        });
-      }
+      await apiRequest("/finance/payments", {
+        method: "POST",
+        body: {
+          staff_id: staff.id, month,
+          hours_sala:       Number(staff.month_hours_sala),
+          hours_reception:  Number(staff.month_hours_reception),
+          hours_class:      Number(staff.month_hours_class),
+          pt_clients_count: clients,
+          absent_hours: 0,
+          gross, gym_cut: cut, absent_deduction: 0, net,
+          notes: notes || null,
+        },
+      });
       onSaved(); onClose();
     } catch (err) { setError(err.message); setSaving(false); }
   }
 
-  const totalNet = totals.reduce((a, t) => a + t.net, 0);
-
   return (
     <Modal onClose={onClose}>
-      <GlassCard className="preview-card" strong style={{ maxWidth: 480, width: "100%", maxHeight: "80vh", overflowY: "auto" }}>
-        <h3>Confirmar pagamento — <span style={{ textTransform: "capitalize" }}>{monthLabelFull(month)}</span></h3>
-        <p className="text-secondary" style={{ fontSize: "0.82rem", marginTop: 4, marginBottom: 14 }}>
-          Horas calculadas automaticamente a partir dos registos de presença.
+      <GlassCard className="preview-card" strong style={{ maxWidth: 420, width: "100%" }}>
+        <h3>{alreadyPaid ? "Atualizar pagamento" : "Confirmar pagamento"} — {staff.name}</h3>
+        <p className="text-secondary" style={{ fontSize: "0.82rem", marginTop: 4, marginBottom: 14, textTransform: "capitalize" }}>
+          {monthLabelFull(month)} · horas calculadas automaticamente a partir dos registos de presença.
         </p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {totals.map((t) => (
-            <div key={t.s.id} style={{ borderBottom: "1px solid var(--glass-border)", padding: "10px 0" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <strong style={{ fontSize: "0.92rem" }}>{t.s.name}</strong>
-                  <span className="text-secondary" style={{ marginLeft: 6, fontSize: "0.78rem" }}>{ROLE_LABELS[t.s.role] || t.s.role}</span>
-                  <div className="text-secondary" style={{ fontSize: "0.76rem", marginTop: 4, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    {Number(t.s.month_hours_sala) > 0       && <span>Sala {t.s.month_hours_sala}h</span>}
-                    {Number(t.s.month_hours_reception) > 0  && <span>Rec. {t.s.month_hours_reception}h</span>}
-                    {Number(t.s.month_hours_class) > 0      && <span>Aulas {t.s.month_hours_class}h</span>}
-                    {Number(t.s.rate_pt_month) > 0 && (
-                      <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        PT
-                        <input type="number" min="0" className="glass-input"
-                          style={{ width: 48, height: 22, padding: "2px 4px", fontSize: "0.76rem", display: "inline" }}
-                          value={ptClients[t.s.id]}
-                          onChange={(e) => setPtClients((p) => ({ ...p, [t.s.id]: e.target.value }))} />
-                        clientes
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div style={{ textAlign: "right", flexShrink: 0 }}>
-                  <div className="text-secondary" style={{ fontSize: "0.76rem" }}>Bruto: {fmtEuro(t.gross)}</div>
-                  {t.cut > 0 && <div style={{ color: "#4ade80", fontSize: "0.76rem" }}>–{fmtEuro(t.cut)}</div>}
-                  <strong style={{ fontSize: "0.95rem" }}>{fmtEuro(t.net)}</strong>
-                </div>
-              </div>
-            </div>
-          ))}
+        <div className="text-secondary" style={{ fontSize: "0.82rem", display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {Number(staff.month_hours_sala) > 0       && <span>Sala {staff.month_hours_sala}h</span>}
+          {Number(staff.month_hours_reception) > 0  && <span>Rec. {staff.month_hours_reception}h</span>}
+          {Number(staff.month_hours_class) > 0      && <span>Aulas {staff.month_hours_class}h</span>}
         </div>
-        {totals.length === 0 && (
-          <p className="text-secondary">Nenhum membro com registos neste mês.</p>
+        {Number(staff.rate_pt_month) > 0 && (
+          <div className="form-row" style={{ marginTop: 10 }}>
+            <label className="field-label">Clientes de PT (ginásio)</label>
+            <input type="number" min="0" className="glass-input" style={{ maxWidth: 100 }}
+              value={ptClients} onChange={(e) => setPtClients(e.target.value)} />
+          </div>
         )}
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14, fontWeight: 700, fontSize: "1rem" }}>
-          <span>Total a pagar</span>
-          <span>{fmtEuro(totalNet)}</span>
+        <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 4, fontSize: "0.88rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span className="text-secondary">Bruto</span>
+            <span>{fmtEuro(gross)}</span>
+          </div>
+          {cut > 0 && (
+            <div style={{ display: "flex", justifyContent: "space-between", color: "#4ade80" }}>
+              <span>Retenção do ginásio</span>
+              <span>– {fmtEuro(cut)}</span>
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "1rem", borderTop: "1px solid var(--glass-border)", paddingTop: 6, marginTop: 2 }}>
+            <span>A pagar</span>
+            <span>{fmtEuro(net)}</span>
+          </div>
         </div>
         <div className="form-row" style={{ marginTop: 12 }}>
           <label className="field-label">Notas (opcional)</label>
@@ -336,8 +305,8 @@ function PayMonthModal({ staffList, month, onClose, onSaved }) {
         {error && <p className="error-text">{error}</p>}
         <div className="form-actions" style={{ marginTop: 14 }}>
           <button className="glass-button glass-button-secondary" onClick={onClose}>Cancelar</button>
-          <button className="glass-button" onClick={handlePay} disabled={saving || !totals.length}>
-            {saving ? "A registar..." : "Confirmar pagamento"}
+          <button className="glass-button" onClick={handlePay} disabled={saving}>
+            {saving ? "A registar..." : alreadyPaid ? "Atualizar pagamento" : "Confirmar pagamento"}
           </button>
         </div>
       </GlassCard>
@@ -350,14 +319,15 @@ export default function FinancePage() {
   const navigate = useNavigate();
   const [staffList, setStaffList] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [paidStaffIds, setPaidStaffIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editingRates, setEditingRates] = useState(null);
-  const [payingMonth, setPayingMonth] = useState(false);
+  const [payingStaff, setPayingStaff] = useState(null);
   const [viewingStaff, setViewingStaff] = useState(null); // { id, name }
   const [tab, setTab] = useState("staff");
-  const [staffMonth, setStaffMonth] = useState(prevMonthYM(currentYM()));
-  const [payMonth, setPayMonth] = useState(prevMonthYM(currentYM()));
+  const [staffMonth, setStaffMonth] = useState(currentYM());
+  const [payMonth, setPayMonth] = useState(currentYM());
 
   function load(month) {
     setLoading(true);
@@ -371,12 +341,19 @@ export default function FinancePage() {
     apiRequest(`/finance/payments?month=${month}`).then(setPayments).catch(() => {});
   }
 
-  useEffect(() => { load(staffMonth); }, [staffMonth]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Quem já foi pago no mês da aba "Equipa" (independente do mês visto na
+  // aba "Pagamentos") — para o botão mudar depois de confirmado.
+  function loadPaidThisMonth(month) {
+    apiRequest(`/finance/payments?month=${month}`)
+      .then((rows) => setPaidStaffIds(new Set(rows.map((p) => p.staff_id))))
+      .catch(() => {});
+  }
+
+  useEffect(() => { load(staffMonth); loadPaidThisMonth(staffMonth); }, [staffMonth]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { loadPayments(payMonth); }, [payMonth]);
 
   const grossMonth   = staffList.reduce((s, st) => s + calcEarnings(st).gross, 0);
   const gymCutMonth  = staffList.reduce((s, st) => s + calcEarnings(st).cut,   0);
-  const hasAttendance = staffList.some((s) => Number(s.shifts_present) + Number(s.shifts_adjusted) + Number(s.shifts_absent) > 0);
 
   function exportPDF() {
     const win = window.open("", "_blank", "width=800,height=700");
@@ -465,19 +442,17 @@ export default function FinancePage() {
                 </GlassCard>
               </div>
 
-              {hasAttendance && (
-                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-                  <button className="glass-button" style={{ fontSize: "0.85rem" }} onClick={() => setPayingMonth(true)}>
-                    Confirmar pagamento do mês
-                  </button>
-                </div>
-              )}
-
               <div className="member-grid">
                 {staffList.map((s) => {
                   const { cut, net } = calcEarnings(s);
                   const url = resolveAssetUrl(s.avatar_url);
                   const totalShifts = Number(s.shifts_present) + Number(s.shifts_adjusted) + Number(s.shifts_absent) + Number(s.shifts_pending);
+                  const canPay =
+                    Number(s.month_hours_sala) > 0 ||
+                    Number(s.month_hours_reception) > 0 ||
+                    Number(s.month_hours_class) > 0 ||
+                    Number(s.month_gym_clients) > 0 ||
+                    Number(s.base_salary) > 0;
                   return (
                     <GlassCard key={s.id} className="member-tile" strong>
                       <div className="member-tile-header">
@@ -556,11 +531,28 @@ export default function FinancePage() {
                         </div>
                       </div>
 
-                      <button type="button" className="glass-button glass-button-secondary"
-                        style={{ marginTop: 12, width: "100%", fontSize: "0.82rem" }}
-                        onClick={() => setEditingRates(s)}>
-                        Editar taxas
-                      </button>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+                        {canPay && (
+                          paidStaffIds.has(s.id) ? (
+                            <button type="button" className="glass-button glass-button-secondary"
+                              style={{ width: "100%", fontSize: "0.82rem", color: "#4ade80", borderColor: "rgba(74,222,128,0.4)" }}
+                              onClick={() => setPayingStaff(s)}>
+                              ✓ Pago este mês — atualizar
+                            </button>
+                          ) : (
+                            <button type="button" className="glass-button"
+                              style={{ width: "100%", fontSize: "0.82rem" }}
+                              onClick={() => setPayingStaff(s)}>
+                              Confirmar pagamento
+                            </button>
+                          )
+                        )}
+                        <button type="button" className="glass-button glass-button-secondary"
+                          style={{ width: "100%", fontSize: "0.82rem" }}
+                          onClick={() => setEditingRates(s)}>
+                          Editar taxas
+                        </button>
+                      </div>
                     </GlassCard>
                   );
                 })}
@@ -655,8 +647,11 @@ export default function FinancePage() {
                       <button className="nf-text-danger" style={{ fontSize: "0.75rem", marginTop: 6 }}
                         onClick={async () => {
                           if (!window.confirm("Anular este pagamento?")) return;
-                          try { await apiRequest(`/finance/payments/${p.id}`, { method: "DELETE" }); loadPayments(payMonth); }
-                          catch (err) { setError(err.message); }
+                          try {
+                            await apiRequest(`/finance/payments/${p.id}`, { method: "DELETE" });
+                            loadPayments(payMonth);
+                            if (payMonth === staffMonth) loadPaidThisMonth(staffMonth);
+                          } catch (err) { setError(err.message); }
                         }}>Anular</button>
                     </div>
                   </div>
@@ -683,14 +678,16 @@ export default function FinancePage() {
           onClose={() => setViewingStaff(null)}
         />
       )}
-      {payingMonth && (
-        <PayMonthModal
-          staffList={staffList}
+      {payingStaff && (
+        <PayStaffModal
+          staff={payingStaff}
           month={staffMonth}
-          onClose={() => setPayingMonth(false)}
+          alreadyPaid={paidStaffIds.has(payingStaff.id)}
+          onClose={() => setPayingStaff(null)}
           onSaved={() => {
             loadPayments(staffMonth);
-            setPayingMonth(false);
+            loadPaidThisMonth(staffMonth);
+            setPayingStaff(null);
             setTab("payments");
             setPayMonth(staffMonth);
           }}

@@ -1,6 +1,6 @@
 const pool = require("../db/pool");
-const { nextOccurrence, cutoffPassed } = require("../utils/classDates");
-const { notifyVacantClasses, notifySubstituteRequest } = require("../services/classNotify");
+const { nextOccurrence, cutoffPassed, toDateKey, weekdayOf, minutesOf } = require("../utils/classDates");
+const { notifyVacantClasses, notifySubstituteRequest, notifyWaitlistPromotion } = require("../services/classNotify");
 const { findConflict } = require("../utils/staffBusy");
 
 // Aulas de grupo: horário semanal do ginásio (ver group_classes no
@@ -34,7 +34,12 @@ async function withNextOccurrence(rows, userId) {
             EXISTS (SELECT 1 FROM class_enrollments e WHERE e.class_id = k.class_id AND e.class_date = k.class_date AND e.member_id = $3) AS is_enrolled,
             (SELECT reason FROM class_cancellations x WHERE x.class_id = k.class_id AND x.class_date = k.class_date) AS cancelled_reason,
             co.instructor_confirmed,
-            co.reception_confirmed
+            co.reception_confirmed,
+            (SELECT r.rank FROM (
+               SELECT e.member_id, ROW_NUMBER() OVER (ORDER BY e.created_at) AS rank
+                 FROM class_enrollments e
+                WHERE e.class_id = k.class_id AND e.class_date = k.class_date
+             ) r WHERE r.member_id = $3) AS my_rank
        FROM unnest($1::int[], $2::date[]) AS k(class_id, class_date)
        LEFT JOIN class_occurrences co ON co.class_id = k.class_id AND co.class_date = k.class_date`,
     [keys.map((k) => k[0]), keys.map((k) => k[1]), userId]
@@ -42,6 +47,8 @@ async function withNextOccurrence(rows, userId) {
   const byClass = new Map(stats.rows.map((r) => [r.class_id, r]));
   return dated.map((c) => {
     const s = byClass.get(c.id) || {};
+    const myRank = s.my_rank != null ? Number(s.my_rank) : null;
+    const waitlistPosition = c.capacity && myRank && myRank > c.capacity ? myRank - c.capacity : null;
     return {
       ...c,
       enrolled_count: s.enrolled_count || 0,
@@ -50,6 +57,10 @@ async function withNextOccurrence(rows, userId) {
       enrollment_open: !s.cancelled_reason && !cutoffPassed(c, c.next_date, now),
       instructor_confirmed: Boolean(s.instructor_confirmed),
       reception_confirmed: Boolean(s.reception_confirmed),
+      // Lista de espera: se a aula tem lotação e já está cheia, continuas a
+      // poder inscrever-te — fica guardada a tua posição na fila (derivada
+      // da ordem de inscrição), e quando alguém sai és promovido.
+      waitlist_position: waitlistPosition,
     };
   });
 }
@@ -252,6 +263,20 @@ async function claimClass(req, res) {
 // só nas aulas que não são eles a dar).
 const ENROLL_ROLES = ["member", "personal_trainer", "nutritionist"];
 
+// Promove quem está em 1º na lista de espera para a vaga que acabou de
+// abrir (a ordem é sempre a de inscrição — ver withNextOccurrence).
+async function promoteFromWaitlist(gymId, gymClass, dateKey) {
+  const result = await pool.query(
+    `SELECT member_id FROM class_enrollments
+      WHERE class_id = $1 AND class_date = $2
+      ORDER BY created_at
+      LIMIT 1 OFFSET $3`,
+    [gymClass.id, dateKey, gymClass.capacity - 1]
+  );
+  const promoted = result.rows[0];
+  if (promoted) await notifyWaitlistPromotion(gymId, gymClass, promoted.member_id);
+}
+
 // POST /api/classes/:id/enroll — inscrição na próxima aula.
 // DELETE no mesmo caminho cancela a inscrição.
 async function enroll(req, res) {
@@ -263,7 +288,8 @@ async function enroll(req, res) {
   const [c] = await withNextOccurrence([gymClass], req.user.id);
   if (c.cancelled_reason) return res.status(409).json({ message: "Esta aula foi cancelada." });
   if (!c.enrollment_open) return res.status(409).json({ message: "As inscrições para esta aula já fecharam." });
-  if (c.capacity && c.enrolled_count >= c.capacity) return res.status(409).json({ message: "A aula está cheia." });
+  // Lotação cheia já não recusa a inscrição — entra em lista de espera
+  // (a posição é derivada da ordem de inscrição, ver withNextOccurrence).
   await pool.query(
     `INSERT INTO class_enrollments (class_id, member_id, class_date) VALUES ($1, $2, $3)
      ON CONFLICT DO NOTHING`,
@@ -277,11 +303,14 @@ async function unenroll(req, res) {
   const gymClass = await fetchClass(req.params.id, req.user.gymId);
   if (!gymClass) return res.status(404).json({ message: "Aula não encontrada." });
   const [c] = await withNextOccurrence([gymClass], req.user.id);
+  const wasConfirmed = c.is_enrolled && !c.waitlist_position;
   await pool.query(`DELETE FROM class_enrollments WHERE class_id = $1 AND member_id = $2 AND class_date = $3`, [
     c.id,
     req.user.id,
     c.next_date,
   ]);
+  // Uma vaga confirmada abriu-se — promove quem estava primeiro na fila.
+  if (wasConfirmed && gymClass.capacity) await promoteFromWaitlist(req.user.gymId, gymClass, c.next_date);
   const [updated] = await withNextOccurrence([gymClass], req.user.id);
   res.json(updated);
 }
@@ -475,10 +504,17 @@ async function unconfirmOccurrence(req, res) {
 // notify enrolled members + staff.
 async function autoCancel(req, res) {
   const gymId = req.user.gymId;
-  const today = new Date().toLocaleDateString("sv");
+  // Hora/dia de "agora" vêm sempre do relógio local do Node (mesma fonte
+  // que nextOccurrence/cutoffPassed), nunca do LOCALTIME do Postgres — a
+  // sessão da BD pode estar noutro fuso (ex: UTC no Supabase), o que
+  // desalinharia o corte em relação ao calculado aqui.
+  const now = new Date();
+  const today = toDateKey(now);
+  const nowMinutes = minutesOf(now);
 
-  // Find classes where sub is requested, today matches weekday, cutoff has passed, not yet cancelled.
-  const overdue = await pool.query(
+  // Candidatas: substituto pedido, hoje é o dia da semana certo, ainda não
+  // cancelada. O corte da hora é verificado a seguir, em JS.
+  const candidates = await pool.query(
     `SELECT gc.id, gc.title, gc.weekday, gc.sub_cutoff_minutes,
             to_char(gc.start_time,'HH24:MI') AS start_time,
             to_char(gc.end_time,'HH24:MI') AS end_time,
@@ -486,17 +522,19 @@ async function autoCancel(req, res) {
        FROM group_classes gc
       WHERE gc.gym_id = $1
         AND gc.substitute_requested = true
-        AND gc.weekday = EXTRACT(ISODOW FROM $2::date)::int
-        AND (gc.start_time - (gc.sub_cutoff_minutes || ' minutes')::interval) <= LOCALTIME
+        AND gc.weekday = $2
         AND NOT EXISTS (
           SELECT 1 FROM class_cancellations cc
-          WHERE cc.class_id = gc.id AND cc.class_date = $2::date
+          WHERE cc.class_id = gc.id AND cc.class_date = $3::date
         )`,
-    [gymId, today]
+    [gymId, weekdayOf(now), today]
+  );
+  const overdue = candidates.rows.filter(
+    (gc) => toMinutes(gc.start_time) - gc.sub_cutoff_minutes <= nowMinutes
   );
 
   const cancelled = [];
-  for (const gc of overdue.rows) {
+  for (const gc of overdue) {
     await pool.query(
       `INSERT INTO class_cancellations (class_id, class_date, reason)
        VALUES ($1, $2::date, 'no_instructor') ON CONFLICT DO NOTHING`,

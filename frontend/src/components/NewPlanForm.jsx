@@ -17,7 +17,7 @@ import { INVALID_REPS_MESSAGE, dayHasInvalidReps, dayToForm, emptyDay, formDayTo
 //   (submitPath={`/plans/${plan.id}`})
 // Passar `initialPlan` (com `method="PUT"`) pré-preenche tudo a partir de um
 // plano existente em vez de começar em branco.
-export default function NewPlanForm({ exercises, submitPath, method = "POST", initialPlan, onCreated, onCancel }) {
+export default function NewPlanForm({ exercises, records, submitPath, method = "POST", initialPlan, onCreated, onCancel, onExerciseCreated, onExerciseDeleted }) {
   const [name, setName] = useState(initialPlan?.name ?? "");
   const [description, setDescription] = useState(initialPlan?.description ?? "");
   const [days, setDays] = useState(initialPlan ? initialPlan.days.map(dayToForm) : [emptyDay()]);
@@ -100,9 +100,12 @@ export default function NewPlanForm({ exercises, submitPath, method = "POST", in
               key={dayIndex}
               day={day}
               exercises={exercises}
+              records={records}
               onChange={(updated) => updateDay(dayIndex, updated)}
               onRemove={() => setDays((prev) => prev.filter((_, i) => i !== dayIndex))}
               canRemove={days.length > 1}
+              onExerciseCreated={onExerciseCreated}
+              onExerciseDeleted={onExerciseDeleted}
             />
           ))}
 

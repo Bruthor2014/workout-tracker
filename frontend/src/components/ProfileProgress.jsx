@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import GlassCard from "./GlassCard";
 import ProgressChart from "./ProgressChart";
-import { IconClock, IconDumbbell, IconTrendingUp, IconTrophy, IconWeightStack } from "./Icons";
+import { IconChevronRight, IconClock, IconDumbbell, IconTrendingUp, IconTrophy, IconWeightStack } from "./Icons";
 import { apiRequest } from "../api/client";
 import { addDays, startOfWeek, toDateKey } from "../utils/date";
 import { muscleGroupVisual } from "../utils/muscleGroups";
@@ -54,14 +55,22 @@ function weeklySeries(sessions) {
   }));
 }
 
-function StatTile({ icon: Icon, label, value, unit, caption }) {
+// `onClick` é opcional — só o próprio utilizador a ver o seu progresso tem
+// para onde navegar/saltar a partir daqui (ver `own` em ProfileProgress);
+// a vista de staff sobre um membro (`memberId`) fica sem seta, só leitura.
+function StatTile({ icon: Icon, label, value, unit, caption, onClick }) {
   return (
-    <GlassCard className="stat-tile profile-stat" strong>
+    <GlassCard
+      className={`stat-tile profile-stat${onClick ? " profile-stat-clickable" : ""}`}
+      strong
+      {...(onClick ? { role: "button", tabIndex: 0, onClick, onKeyDown: (e) => e.key === "Enter" && onClick() } : {})}
+    >
       <div className="stat-tile-header">
         <span className="stat-tile-icon">
           <Icon size={22} />
         </span>
         <span className="stat-tile-label">{label}</span>
+        {onClick && <IconChevronRight size={16} className="profile-stat-chevron" />}
       </div>
       <div className="stat-tile-value-row">
         <span className="stat-tile-value">{value}</span>
@@ -77,9 +86,17 @@ function StatTile({ icon: Icon, label, value, unit, caption }) {
 // Com `memberId` mostra o progresso desse membro (perfil do membro visto
 // pelo staff); sem ele, o do próprio utilizador.
 export default function ProfileProgress({ memberId }) {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [showAllRecords, setShowAllRecords] = useState(false);
+  // Staff a ver o progresso de um membro (`memberId`) não tem dashboard
+  // nem registo de peso próprios para onde saltar a partir daqui.
+  const own = !memberId;
+
+  function scrollToId(id) {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   useEffect(() => {
     const base = memberId ? `/member/${memberId}` : "";
@@ -134,6 +151,7 @@ export default function ProfileProgress({ memberId }) {
           label="Treinos"
           value={fmt(sessions.length)}
           caption={`${workoutsThisMonth} este mês`}
+          onClick={own ? () => navigate("/dashboard") : undefined}
         />
         <StatTile
           icon={IconClock}
@@ -141,6 +159,7 @@ export default function ProfileProgress({ memberId }) {
           value={fmt(totalHours, 1)}
           unit="h"
           caption={`Média de ${formatHours(avgWeeklyHours)} por semana`}
+          onClick={own && sessions.length > 0 ? () => scrollToId("profile-hours-chart") : undefined}
         />
         <StatTile
           icon={IconWeightStack}
@@ -148,6 +167,7 @@ export default function ProfileProgress({ memberId }) {
           value={fmt(totalVolume)}
           unit="kg"
           caption="Soma de reps × carga"
+          onClick={own && sessions.length > 0 ? () => scrollToId("profile-volume-chart") : undefined}
         />
         <StatTile
           icon={IconTrendingUp}
@@ -161,6 +181,7 @@ export default function ProfileProgress({ memberId }) {
                 : "Ainda sem registos"
               : `${weightChange > 0 ? "+" : weightChange < 0 ? "−" : "±"}${fmt(Math.abs(weightChange), 1)} kg desde ${shortDate(parseKey(weights[0].date))}`
           }
+          onClick={own ? () => scrollToId("body-metrics-section") : undefined}
         />
       </div>
 
@@ -174,7 +195,7 @@ export default function ProfileProgress({ memberId }) {
         </GlassCard>
       ) : (
         <div className="profile-charts">
-          <GlassCard className="profile-chart-card" strong>
+          <GlassCard className="profile-chart-card" strong id="profile-hours-chart">
             <h3>Horas de treino por semana</h3>
             <p className="text-secondary">Últimas {WEEKS} semanas</p>
             <ProgressChart
@@ -185,7 +206,7 @@ export default function ProfileProgress({ memberId }) {
               ariaLabel="Horas de treino por semana"
             />
           </GlassCard>
-          <GlassCard className="profile-chart-card" strong>
+          <GlassCard className="profile-chart-card" strong id="profile-volume-chart">
             <h3>Volume levantado por semana</h3>
             <p className="text-secondary">Reps × carga, últimas {WEEKS} semanas</p>
             <ProgressChart

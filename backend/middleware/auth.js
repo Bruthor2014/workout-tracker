@@ -1,9 +1,19 @@
 const jwt = require("jsonwebtoken");
+const pool = require("../db/pool");
 
 // Lê o header "Authorization: Bearer <token>", valida o JWT e, se for
 // válido, guarda o payload em req.user para os controllers usarem
 // (req.user.id, req.user.gymId, req.user.role).
-function requireAuth(req, res, next) {
+//
+// gymId/role vêm sempre confirmados na BD, nunca só do payload do token:
+// o JWT fica com o valor de quando a sessão começou (dura 7 dias — ver
+// signToken em authController.js), mas gym_id/role podem mudar entretanto
+// (ex: o DONO atribui alguém como CEO de um ginásio novo). Sem isto, um
+// endpoint que confiasse no gymId do token podia escrever no ginásio
+// ERRADO para quem tivesse sessão aberta de antes da mudança — foi o que
+// aconteceu com o tema do ginásio (updateTheme alterou as cores de outro
+// ginásio, não do novo, porque confiava no token desatualizado).
+async function requireAuth(req, res, next) {
   const header = req.headers.authorization;
   const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
 
@@ -11,12 +21,21 @@ function requireAuth(req, res, next) {
     return res.status(401).json({ message: "Token em falta." });
   }
 
+  let payload;
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
-    next();
+    payload = jwt.verify(token, process.env.JWT_SECRET);
   } catch {
     return res.status(401).json({ message: "Token inválido ou expirado." });
   }
+
+  const result = await pool.query("SELECT gym_id, role FROM users WHERE id = $1", [payload.id]);
+  const current = result.rows[0];
+  if (!current) {
+    return res.status(401).json({ message: "Conta não encontrada." });
+  }
+
+  req.user = { id: payload.id, gymId: current.gym_id, role: current.role };
+  next();
 }
 
 // Uso: router.post("/plans", requireAuth, requireRole("gym_owner", "personal_trainer"), handler)
@@ -31,11 +50,12 @@ function requireRole(...allowedRoles) {
   };
 }
 
-// O CEO (gym_owner), o DONO da plataforma e a conta da receção (PC fixo
-// do balcão, não uma pessoa) são contas de gestão/estação: não têm
-// treinos, planos nem dados pessoais próprios.
+// A conta da receção (PC fixo do balcão, não uma pessoa) é a única conta
+// puramente de estação: não tem treinos, planos nem dados pessoais
+// próprios. O CEO e o DONO da plataforma, apesar de terem contas de
+// gestão, são também pessoas e podem ter os seus próprios treinos.
 function notOwner(req, res, next) {
-  if (["gym_owner", "dono", "reception_station"].includes(req.user.role)) {
+  if (req.user.role === "reception_station") {
     return res.status(403).json({ message: "A conta de gestão não tem treinos nem dados pessoais." });
   }
   next();

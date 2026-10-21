@@ -240,7 +240,7 @@ export default function ClientsPage() {
           </span>
           <h1>Clientes</h1>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
+        <div className="page-header-actions">
           <button
             type="button"
             className="glass-button glass-button-secondary"

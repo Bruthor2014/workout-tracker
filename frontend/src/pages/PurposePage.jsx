@@ -26,7 +26,7 @@ export default function PurposePage() {
   return (
     <div className="page-center">
       <GlassCard className="auth-card">
-        <h1>Como vais usar a Workout Tracker?</h1>
+        <h1>Como vais usar a Ironbound?</h1>
 
         <div className="purpose-picker">
           {PURPOSES.map(({ id, Icon, label, available }) => (

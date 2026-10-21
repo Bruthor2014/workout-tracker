@@ -334,6 +334,8 @@ function ClassDetailModal({ gymClass, user, onClose, onChanged, onEdit }) {
   const [enrolled, setEnrolled] = useState(null);
   const canSeeEnrolled = user.role === "gym_owner" || gymClass.instructor_id === user.id;
   const full = gymClass.capacity && gymClass.enrolled_count >= gymClass.capacity;
+  const confirmedCount = gymClass.capacity ? Math.min(gymClass.enrolled_count, gymClass.capacity) : gymClass.enrolled_count;
+  const waitlistCount = gymClass.capacity ? Math.max(0, gymClass.enrolled_count - gymClass.capacity) : 0;
 
   useEffect(() => {
     if (!canSeeEnrolled) return;
@@ -386,9 +388,14 @@ function ClassDetailModal({ gymClass, user, onClose, onChanged, onEdit }) {
           <div>
             <span className="text-secondary">Inscritos</span>
             <strong>
-              {gymClass.enrolled_count}
+              {confirmedCount}
               {gymClass.capacity ? ` / ${gymClass.capacity}` : ""}
             </strong>
+            {waitlistCount > 0 && (
+              <span className="text-secondary" style={{ display: "block", fontSize: "0.76rem" }}>
+                +{waitlistCount} em lista de espera
+              </span>
+            )}
           </div>
           <div>
             <span className="text-secondary">Mínimo</span>
@@ -416,16 +423,18 @@ function ClassDetailModal({ gymClass, user, onClose, onChanged, onEdit }) {
         {canEnroll && !gymClass.cancelled_reason && (
           gymClass.is_enrolled ? (
             <button type="button" className="glass-button glass-button-secondary" onClick={() => act(`/classes/${gymClass.id}/enroll`, "DELETE")}>
-              ✓ Inscrito — cancelar inscrição
+              {gymClass.waitlist_position
+                ? `Na lista de espera (${gymClass.waitlist_position}º) — cancelar`
+                : "✓ Inscrito — cancelar inscrição"}
             </button>
           ) : (
             <button
               type="button"
               className="glass-button log-save-button"
               onClick={() => act(`/classes/${gymClass.id}/enroll`, "POST")}
-              disabled={!gymClass.enrollment_open || full}
+              disabled={!gymClass.enrollment_open}
             >
-              {full ? "Aula cheia" : "Inscrever-me"}
+              {full ? "Aula cheia — entrar na lista de espera" : "Inscrever-me"}
             </button>
           )
         )}
@@ -546,12 +555,12 @@ export default function GroupClassesPage() {
       badge: c.cancelled_reason
         ? "Cancelada"
         : c.is_enrolled
-        ? "✓ Inscrito"
+        ? (c.waitlist_position ? `Lista de espera (${c.waitlist_position}º)` : "✓ Inscrito")
         : !c.instructor_id
         ? "Vaga"
         : c.substitute_requested
         ? "Precisa de substituto"
-        : `${c.enrolled_count}${c.capacity ? `/${c.capacity}` : ""} inscritos`,
+        : `${c.capacity ? Math.min(c.enrolled_count, c.capacity) : c.enrolled_count}${c.capacity ? `/${c.capacity}` : ""} inscritos`,
     };
   });
 
@@ -651,6 +660,8 @@ export default function GroupClassesPage() {
       ) : (
         <GlassCard className="schedule-card" strong>
           <WeekTimetable
+            dense
+            clip
             items={items}
             onItemClick={(item) => setViewing(item)}
             emptyText={isOwner ? "Ainda não há aulas — cria a primeira com “Nova aula”." : "O ginásio ainda não tem aulas de grupo."}

@@ -1,5 +1,4 @@
 const multer = require("multer");
-const path = require("path");
 
 function fileFilter(req, file, cb) {
   const allowed = ["image/jpeg", "image/png", "image/webp"];
@@ -9,26 +8,21 @@ function fileFilter(req, file, cb) {
   cb(null, true);
 }
 
-// Upload de uma imagem para uploads/<folder>/ (o multer cria a pasta se não
-// existir), com nome "<prefix>-<id do utilizador>-<timestamp>.<ext>".
-// requireAuth tem de correr antes, porque o nome usa req.user.id.
-function imageUpload(folder, prefix) {
-  const storage = multer.diskStorage({
-    destination: path.join(__dirname, "..", "uploads", folder),
-    filename(req, file, cb) {
-      const ext = path.extname(file.originalname).toLowerCase();
-      cb(null, `${prefix}-${req.user.id}-${Date.now()}${ext}`);
-    },
-  });
-
+// Guarda o ficheiro em memória (req.file.buffer), não em disco — o
+// controller é que decide o destino final através de services/storage.js
+// (Supabase Storage quando configurada, senão disco local). Sem isto, o
+// ficheiro ficaria preso ao disco do servidor que recebeu o pedido, o que
+// impede correr mais do que uma instância da app.
+function imageUpload() {
   return multer({
-    storage,
+    storage: multer.memoryStorage(),
     fileFilter,
     limits: { fileSize: 3 * 1024 * 1024 }, // 3MB
   });
 }
 
-const uploadAvatar = imageUpload("avatars", "user");
-const uploadFoodPhoto = imageUpload("foods", "food");
+const uploadAvatar = imageUpload();
+const uploadFoodPhoto = imageUpload();
+const uploadExercisePhoto = imageUpload();
 
-module.exports = { uploadAvatar, uploadFoodPhoto };
+module.exports = { uploadAvatar, uploadFoodPhoto, uploadExercisePhoto };

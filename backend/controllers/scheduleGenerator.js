@@ -1,7 +1,8 @@
 const pool = require("../db/pool");
-const { notifyVacantClasses } = require("../services/classNotify");
 
 // Gerador automático do horário semanal da equipa (POST /api/shifts/generate).
+// Só gera turnos (sala/receção) — as aulas de grupo são sempre criadas e
+// geridas à mão pelo CEO, nunca por este gerador.
 //
 // Regras:
 // - O ginásio está aberto das 06:00 às 23:00, em três turnos por dia:
@@ -12,33 +13,28 @@ const { notifyVacantClasses } = require("../services/classNotify");
 //   horas, entra um 2.º PT fora da ponta.
 // - Receção: sempre 1 pessoa em cada turno (preferência: rececionista,
 //   estagiário, nutricionista e, só se faltar gente, um PT).
-// - `classes_per_day` aulas de grupo por dia, dadas por quem tem a função
-//   "Aulas" e não esteja num turno a essa hora.
 // - As sessões dos PTs/nutricionistas com clientes ficam como estão: nenhum
-//   turno ou aula lhes toca, e contam para as horas da semana.
+//   turno lhes toca, e contam para as horas da semana.
 // - Cada pessoa: no máximo 1 turno por dia, `max_days` dias por semana e
-//   `max_hours` horas por semana (turnos + aulas). Só faz as funções que o
-//   CEO lhe deu (Sala, Receção, Aulas).
+//   `max_hours` horas por semana. Só faz as funções que o CEO lhe deu
+//   (Sala, Receção).
 //
-// Substitui todos os turnos e as aulas de grupo normais (kind = 'class');
-// palestras e eventos ficam como estão.
+// Substitui todos os turnos da equipa; aulas de grupo, palestras e eventos
+// ficam todos como estão.
 
 const OPEN = "06:00";
 const MORNING_END = "11:00";
 const CLOSE = "23:00";
-const CLASS_SLOTS = ["07:00", "12:30", "19:00", "18:00", "09:30"]; // pela ordem em que entram
-const CLASS_NAMES = ["Cycling", "Pilates", "Body Pump", "HIIT", "Yoga", "Zumba", "Funcional", "Cross Training", "Step", "Core & Abs"];
-const ROOMS = ["Estúdio 1", "Estúdio 2"];
 const RECEPTION_TIERS = ["receptionist", "intern", "nutritionist", "personal_trainer"];
-const FUNCTIONS = ["floor", "reception", "classes"];
+const FUNCTIONS = ["floor", "reception"];
 const TIME_RE = /^([01]\d|2[0-3]):(00|30)$/;
 
 // Funções por omissão de cada cargo.
 const DEFAULT_FUNCTIONS = {
-  personal_trainer: ["floor", "reception", "classes"],
+  personal_trainer: ["floor", "reception"],
   nutritionist: ["reception"],
   receptionist: ["reception"],
-  intern: ["reception", "classes"],
+  intern: ["reception"],
 };
 
 const toMinutes = (t) => {
@@ -61,7 +57,6 @@ function normalizeOptions(body = {}, staff) {
     peakStart: fromMinutes(peakMinutes),
     peakFloor: clampInt(body.peak_floor, 1, 2, 2),
     baseFloor: clampInt(body.base_floor, 1, 2, 1),
-    classesPerDay: clampInt(body.classes_per_day, 0, CLASS_SLOTS.length, 3),
     staff: staff
       .map((s) => {
         const o = people.get(s.id) || {};
@@ -87,13 +82,9 @@ function buildSchedule(staff, options) {
     { start: MORNING_END, end: opts.peakStart },
     { start: opts.peakStart, end: CLOSE, peak: true },
   ].map((b) => ({ ...b, hours: (toMinutes(b.end) - toMinutes(b.start)) / 60 }));
-  const slots = CLASS_SLOTS.slice(0, opts.classesPerDay)
-    .sort()
-    .map((start) => ({ start, end: fromMinutes(toMinutes(start) + 60) }));
 
   const people = opts.staff.map((p) => ({ ...p, hours: 0, days: new Set(), busy: [] }));
   const shifts = [];
-  const classes = [];
   const can = (p, fn) => p.functions.includes(fn);
 
   // Sessões com clientes (fixas): contam para as horas e ocupam a pessoa.
@@ -176,7 +167,7 @@ function buildSchedule(staff, options) {
   }
 
   for (let day = 1; day <= 7; day++) {
-    // 3. Receção: 1 pessoa por turno, pela ordem de preferência dos cargos.
+    // 2. Receção: 1 pessoa por turno, pela ordem de preferência dos cargos.
     blocks.forEach((block) => {
       let p = null;
       for (const restingToo of [false, true]) {
@@ -195,32 +186,7 @@ function buildSchedule(staff, options) {
     });
   }
 
-  // 3. Aulas: com alguém da função "Aulas" livre a essa hora (PTs primeiro).
-  const instructors = people.filter((p) => can(p, "classes"));
-  let nameIndex = 0;
-  for (let day = 1; day <= 7; day++) {
-    slots.forEach((slot, s) => {
-      const free = (p) => p.hours + 1 <= p.maxHours && !p.busy.some((x) => x.day === day && overlaps(x, slot));
-      const p =
-        pick(instructors.filter((x) => x.role === "personal_trainer" && free(x))) ||
-        pick(instructors.filter((x) => x.role !== "personal_trainer" && free(x)));
-      if (p) {
-        p.hours += 1;
-        p.busy.push({ day, ...slot });
-      }
-      classes.push({
-        title: CLASS_NAMES[nameIndex++ % CLASS_NAMES.length],
-        weekday: day,
-        start_time: slot.start,
-        end_time: slot.end,
-        room: ROOMS[s % ROOMS.length],
-        capacity: 20,
-        instructor_id: p ? p.id : null,
-      });
-    });
-  }
-
-  // 4. Fora da ponta, um 2.º na sala onde sobrarem horas (tarde, depois manhã).
+  // 3. Fora da ponta, um 2.º na sala onde sobrarem horas (tarde, depois manhã).
   if (opts.baseFloor < 2) {
     for (const block of blocks.filter((b) => !b.peak).reverse()) {
       for (let day = 1; day <= 7; day++) {
@@ -238,7 +204,7 @@ function buildSchedule(staff, options) {
     }
   }
 
-  return { shifts, classes, people, blocks };
+  return { shifts, people, blocks };
 }
 
 const DAY_NAMES = ["", "segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"];
@@ -278,8 +244,8 @@ function coverageReport(shifts, opts = { peakStart: "17:00", peakFloor: 2, baseF
 }
 
 // POST /api/shifts/generate — CEO. Body (tudo opcional):
-// { peak_start: "17:00", peak_floor: 2, base_floor: 1, classes_per_day: 3,
-//   people: [{ id, include, max_hours, max_days, functions: ["floor", "reception", "classes"] }] }
+// { peak_start: "17:00", peak_floor: 2, base_floor: 1,
+//   people: [{ id, include, max_hours, max_days, functions: ["floor", "reception"] }] }
 async function generateSchedule(req, res) {
   const staffResult = await pool.query(
     `SELECT id, name, role FROM users
@@ -299,26 +265,18 @@ async function generateSchedule(req, res) {
     return res.status(400).json({ message: "É preciso pelo menos uma pessoa com a função Sala para gerar o horário." });
   }
 
-  const { shifts, classes, people } = buildSchedule(staffResult.rows, opts);
+  const { shifts, people } = buildSchedule(staffResult.rows, opts);
   const coverage = coverageReport(shifts, opts);
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     await client.query(`DELETE FROM staff_shifts WHERE gym_id = $1`, [req.user.gymId]);
-    await client.query(`DELETE FROM group_classes WHERE gym_id = $1 AND kind = 'class'`, [req.user.gymId]);
     for (const s of shifts) {
       await client.query(
         `INSERT INTO staff_shifts (gym_id, staff_id, weekday, start_time, end_time, activity, location)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [req.user.gymId, s.staff_id, s.weekday, s.start_time, s.end_time, s.activity, s.location]
-      );
-    }
-    for (const c of classes) {
-      await client.query(
-        `INSERT INTO group_classes (gym_id, title, kind, weekday, start_time, end_time, room, capacity, instructor_id)
-         VALUES ($1, $2, 'class', $3, $4, $5, $6, $7, $8)`,
-        [req.user.gymId, c.title, c.weekday, c.start_time, c.end_time, c.room, c.capacity, c.instructor_id]
       );
     }
     await client.query("COMMIT");
@@ -328,9 +286,6 @@ async function generateSchedule(req, res) {
   } finally {
     client.release();
   }
-
-  const vacant = classes.filter((c) => !c.instructor_id);
-  await notifyVacantClasses(req.user.gymId, vacant);
 
   // Verificar se algum turno gerado solapa uma sessão com cliente (não devia acontecer
   // mas serve de aviso se o estado da BD estava inconsistente antes de gerar).
@@ -355,8 +310,6 @@ async function generateSchedule(req, res) {
 
   res.json({
     shifts: shifts.length,
-    classes: classes.length,
-    vacant_classes: vacant.length,
     gaps: coverage.gaps,
     max_pts_on_floor: coverage.maxFloor,
     conflicts: conflicts.length > 0 ? conflicts : undefined,

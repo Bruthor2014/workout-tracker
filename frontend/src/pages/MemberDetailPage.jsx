@@ -240,6 +240,7 @@ function MemberAvatar({ member }) {
 function PlansSection({ memberId, canCreate }) {
   const [plans, setPlans] = useState([]);
   const [exercises, setExercises] = useState([]);
+  const [records, setRecords] = useState(() => new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -255,6 +256,10 @@ function PlansSection({ memberId, canCreate }) {
   useEffect(() => {
     loadPlans();
     apiRequest("/exercises").then(setExercises).catch(() => {});
+    // Recorde de cada exercício deste membro (não os do próprio PT/dono).
+    apiRequest(`/sessions/member/${memberId}/records`)
+      .then((rows) => setRecords(new Map(rows.map((r) => [String(r.exercise_id), r]))))
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberId]);
 
@@ -270,12 +275,15 @@ function PlansSection({ memberId, canCreate }) {
         <div style={{ marginTop: 14 }}>
           <NewPlanForm
             exercises={exercises}
+            records={records}
             submitPath={`/plans/member/${memberId}`}
             onCancel={() => setShowForm(false)}
             onCreated={() => {
               setShowForm(false);
               loadPlans();
             }}
+            onExerciseCreated={(newEx) => setExercises((prev) => [...prev, newEx])}
+            onExerciseDeleted={(id) => setExercises((prev) => prev.filter((e) => e.id !== id))}
           />
         </div>
       )}
@@ -291,7 +299,16 @@ function PlansSection({ memberId, canCreate }) {
 
       <div className="plan-list" style={{ marginTop: 12 }}>
         {plans.map((plan) => (
-          <PlanCard key={plan.id} plan={plan} exercises={exercises} editable onChanged={loadPlans} />
+          <PlanCard
+            key={plan.id}
+            plan={plan}
+            exercises={exercises}
+            records={records}
+            editable
+            onChanged={loadPlans}
+            onExerciseCreated={(newEx) => setExercises((prev) => [...prev, newEx])}
+            onExerciseDeleted={(id) => setExercises((prev) => prev.filter((e) => e.id !== id))}
+          />
         ))}
       </div>
     </div>

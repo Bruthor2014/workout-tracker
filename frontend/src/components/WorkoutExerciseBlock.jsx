@@ -1,16 +1,8 @@
 import ExercisePicker from "./ExercisePicker";
 import Select from "./Select";
 import { IconCheck, IconPlusCircle, IconTrash, IconTrophy } from "./Icons";
-import { SET_TYPES, setTypeInfo } from "../utils/setTypes";
+import { TECHNIQUE_OPTIONS, setTypeInfo } from "../utils/setTypes";
 import { CARDIO_GROUP } from "../utils/muscleGroups";
-
-// Opções do seletor de técnica: cor e explicação de cada uma.
-const TECHNIQUE_OPTIONS = SET_TYPES.map((type) => ({
-  value: type.value,
-  label: type.label,
-  color: type.color || "var(--accent)",
-  description: type.hint || "Séries normais, com descanso entre elas.",
-}));
 
 const MONTH_LABELS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
@@ -36,6 +28,8 @@ export default function WorkoutExerciseBlock({
   onChange,
   onRemove,
   onToggleDone,
+  onExerciseCreated,
+  onExerciseDeleted,
 }) {
   const isCardio = exercises.find((e) => String(e.id) === ex.exercise_id)?.muscle_group === CARDIO_GROUP;
   // Cardio: sempre "normal", e cada linha é um bloco de tempo/distância.
@@ -70,6 +64,8 @@ export default function WorkoutExerciseBlock({
           exercises={exercises}
           value={ex.exercise_id}
           onChange={(exerciseId) => onChange({ ...ex, exercise_id: exerciseId })}
+          onExerciseCreated={onExerciseCreated}
+          onExerciseDeleted={onExerciseDeleted}
         />
         <button
           type="button"

@@ -1,4 +1,4 @@
--- Workout Tracker — schema Fase 1
+-- Ironbound — schema Fase 1
 -- Multi-tenant (vários ginásios), preparado para Fase 2 (admins) e Fase 3 (progresso)
 -- Ver explicação das decisões de design na documentação do projeto.
 
@@ -116,7 +116,9 @@ CREATE TABLE plan_exercises (
     -- NULL quando é um número só.
     target_reps_max INTEGER,
     target_load  NUMERIC(6,2),
-    notes        TEXT
+    notes        TEXT,
+    set_type     VARCHAR(20) NOT NULL DEFAULT 'normal'
+                 CHECK (set_type IN ('normal', 'drop', 'rest_pause', 'cluster', 'superset', 'pyramid', 'failure'))
 );
 
 -- Sessões de treino (um treino/visita concreta, numa data)
@@ -1050,3 +1052,105 @@ CREATE INDEX IF NOT EXISTS idx_rates_staff_gym ON staff_rates(staff_id, gym_id);
 ALTER TABLE external_coach_clients ADD COLUMN IF NOT EXISTS monthly_fee NUMERIC(10,2) NOT NULL DEFAULT 0;
 -- 018: cor de destaque personalizável por ginásio
 ALTER TABLE gyms ADD COLUMN IF NOT EXISTS accent_color VARCHAR(7);
+
+-- 023: sistema de amigos (seguir, sem aprovação, entre ginásios) — código
+-- próprio por utilizador, distinto do invite_code (que é para onboarding
+-- de clientes de um PT/nutricionista).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS friend_code VARCHAR(10) UNIQUE;
+
+CREATE TABLE IF NOT EXISTS friendships (
+    id           SERIAL PRIMARY KEY,
+    follower_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    followee_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (follower_id, followee_id),
+    CHECK (follower_id <> followee_id)
+);
+CREATE INDEX IF NOT EXISTS idx_friendships_follower ON friendships(follower_id);
+CREATE INDEX IF NOT EXISTS idx_friendships_followee ON friendships(followee_id);
+
+-- 024: exercícios personalizados (owner_id NULL = catálogo do ginásio,
+-- owner_id definido = pessoal, só visível para quem o criou).
+ALTER TABLE exercises ALTER COLUMN gym_id DROP NOT NULL;
+ALTER TABLE exercises ADD COLUMN IF NOT EXISTS owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_exercises_owner ON exercises(owner_id);
+
+-- 025: preço de cada serviço (ginásio, PT, nutrição), por agora um valor
+-- fixo por ginásio — NÃO varia por membro/plano ainda (limitação
+-- conhecida, ver PROGRESS.txt).
+CREATE TABLE IF NOT EXISTS gym_service_prices (
+    id              SERIAL PRIMARY KEY,
+    gym_id          INTEGER NOT NULL REFERENCES gyms(id) ON DELETE CASCADE,
+    service_type    service_type NOT NULL,
+    price_cents     INTEGER NOT NULL,
+    billing_period  VARCHAR(20) NOT NULL DEFAULT 'monthly',
+    UNIQUE (gym_id, service_type)
+);
+INSERT INTO gym_service_prices (gym_id, service_type, price_cents, billing_period)
+SELECT g.id, s.service_type, s.price_cents, 'monthly'
+  FROM gyms g
+ CROSS JOIN (VALUES
+    ('gym_membership'::service_type, 3000),
+    ('personal_training'::service_type, 4500),
+    ('nutrition_plan'::service_type, 2500)
+ ) AS s(service_type, price_cents)
+ON CONFLICT (gym_id, service_type) DO NOTHING;
+
+-- 026: estado de pagamento de cada subscrição (paid_until — "pago até"),
+-- para distinguir "em dia" de "em atraso" no perfil, além de só
+-- ativo/inativo. Aplica-se às três subscrições por igual. "Em atraso" é só
+-- um aviso visual — não mexe em contagens/estatísticas nem em acessos
+-- (ver PROGRESS.txt).
+ALTER TABLE member_subscriptions ADD COLUMN IF NOT EXISTS paid_until DATE DEFAULT CURRENT_DATE;
+UPDATE gym_service_prices SET price_cents = 3000 WHERE service_type = 'gym_membership';
+
+-- 027: registo em duas fases (email → nome/password) com confirmação por
+-- email, e login/registo com Google. password_hash fica nullable para
+-- contas só-Google. email_verified marca quem já confirmou — contas já
+-- existentes ficam logo confirmadas.
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token VARCHAR(64);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token_expires_at TIMESTAMPTZ;
+
+-- 028: técnica planeada por exercício de plano (ver set_logs.set_type) —
+-- passa a poder escolher-se ao montar o plano, não só ao registar o treino.
+ALTER TABLE plan_exercises
+    ADD COLUMN IF NOT EXISTS set_type VARCHAR(20) NOT NULL DEFAULT 'normal'
+        CHECK (set_type IN ('normal', 'drop', 'rest_pause', 'cluster', 'superset', 'pyramid', 'failure'));
+
+-- 029: cada série de um exercício de plano passa a poder ter o seu próprio
+-- alvo (reps/carga), em vez de um só valor aplicado a todas (ex: pirâmide).
+-- Mesma ideia de set_logs, mas para o que está planeado, não o que foi
+-- feito. Migra target_sets séries iguais para uma linha por série antes de
+-- remover as colunas antigas.
+CREATE TABLE IF NOT EXISTS plan_exercise_sets (
+    id                SERIAL PRIMARY KEY,
+    plan_exercise_id  INTEGER NOT NULL REFERENCES plan_exercises(id) ON DELETE CASCADE,
+    set_number        INTEGER NOT NULL,
+    target_reps       INTEGER,
+    target_reps_max   INTEGER,
+    target_load       NUMERIC(6,2)
+);
+CREATE INDEX IF NOT EXISTS idx_plan_exercise_sets_pe ON plan_exercise_sets(plan_exercise_id);
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_name = 'plan_exercises' AND column_name = 'target_sets'
+  ) THEN
+    INSERT INTO plan_exercise_sets (plan_exercise_id, set_number, target_reps, target_reps_max, target_load)
+    SELECT pe.id, s, pe.target_reps, pe.target_reps_max, pe.target_load
+      FROM plan_exercises pe
+     CROSS JOIN LATERAL generate_series(1, GREATEST(pe.target_sets, 1)) AS s
+     WHERE NOT EXISTS (SELECT 1 FROM plan_exercise_sets WHERE plan_exercise_id = pe.id);
+
+    ALTER TABLE plan_exercises
+        DROP COLUMN target_sets,
+        DROP COLUMN target_reps,
+        DROP COLUMN target_reps_max,
+        DROP COLUMN target_load;
+  END IF;
+END $$;

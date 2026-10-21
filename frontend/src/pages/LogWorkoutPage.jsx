@@ -184,18 +184,20 @@ export default function LogWorkoutPage() {
 
     if (day) {
       setTitle((current) => current || day.name);
-      // Cada exercício do plano já vem com o nº de séries previsto
-      // (target_sets); as reps/carga alvo ficam como fundo dos campos.
+      // Cada exercício do plano já vem com uma linha por série prevista
+      // (pode variar entre séries, ex: pirâmide); as reps/carga alvo de
+      // cada uma ficam como fundo do respetivo campo.
       setWorkoutExercises(
         day.exercises.length
           ? day.exercises.map((ex) =>
               newExercise(
                 String(ex.exercise_id),
-                Array.from({ length: Math.max(1, ex.target_sets || 1) }, () => ({
+                (ex.sets.length ? ex.sets : [{}]).map((set) => ({
                   ...emptySet(),
-                  repsHint: formatReps(ex.target_reps, ex.target_reps_max),
-                  weightHint: ex.target_load != null ? Number(ex.target_load).toLocaleString("pt-PT") : "",
-                }))
+                  repsHint: formatReps(set.target_reps, set.target_reps_max),
+                  weightHint: set.target_load != null ? Number(set.target_load).toLocaleString("pt-PT") : "",
+                })),
+                ex.set_type || "normal"
               )
             )
           : [newExercise()]
@@ -338,14 +340,7 @@ export default function LogWorkoutPage() {
           </span>
           <div className="log-start-text">
             <h2>{activeStart ? "Treino em curso" : "Iniciar com cronómetro"}</h2>
-            {activeStart ? (
-              <ActiveWorkoutTimer start={activeStart} />
-            ) : (
-              <p>
-                Podes iniciar o treino agora (com cronómetro), a partir de um plano ou em branco — ou simplesmente
-                preencher o formulário abaixo sem cronómetro.
-              </p>
-            )}
+            {activeStart && <ActiveWorkoutTimer start={activeStart} />}
           </div>
 
           {!activeStart && (
@@ -490,6 +485,8 @@ export default function LogWorkoutPage() {
                 onChange={(updated) => replaceExercise(exerciseIndex, updated)}
                 onRemove={() => removeExercise(exerciseIndex)}
                 onToggleDone={(setIndex) => toggleSetDone(exerciseIndex, setIndex)}
+                onExerciseCreated={(newEx) => setExercises((prev) => [...prev, newEx])}
+                onExerciseDeleted={(id) => setExercises((prev) => prev.filter((e) => e.id !== id))}
               />
             ))}
 

@@ -17,7 +17,7 @@ const STAFF = requireRole("gym_owner", "personal_trainer", "nutritionist");
 // Criar planos para um membro: só a especialidade certa.
 const CREATORS = requireRole("personal_trainer");
 // O CEO é uma conta de gestão do ginásio: não tem planos próprios.
-const NOT_OWNER = requireRole("member", "personal_trainer", "nutritionist", "receptionist", "intern");
+const NOT_OWNER = requireRole("member", "personal_trainer", "nutritionist", "receptionist", "intern", "dono", "gym_owner");
 
 router.get("/", requireAuth, NOT_OWNER, listPlans);
 router.post("/", requireAuth, NOT_OWNER, createPlan);

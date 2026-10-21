@@ -44,47 +44,63 @@ export default function AddPersonModal({ defaultRole = "member", onClose, onCrea
     }
   }
 
+  // Sócios são sempre self-service: a pessoa regista-se sozinha em
+  // Registar e isto só liga a conta já existente ao ginásio, pelo email —
+  // nunca cria uma conta nova para um membro (só para staff). Por isso,
+  // com "Sócio" escolhido, nome/password desaparecem (seriam ignorados).
+  const isMember = form.role === "member";
+
   return (
     <Modal onClose={onClose}>
       <GlassCard className="preview-card schedule-form" strong>
         <h3>Adicionar pessoa</h3>
         <form onSubmit={handleSubmit}>
           <div className="schedule-form-grid">
-            <label className="span-2">
-              <span className="log-label">Nome</span>
-              <input className="glass-input" value={form.name} onChange={(e) => set("name")(e.target.value)} placeholder="Ex: Inês Costa" required autoFocus />
-            </label>
+            {!isMember && (
+              <label className="span-2">
+                <span className="log-label">Nome</span>
+                <input className="glass-input" value={form.name} onChange={(e) => set("name")(e.target.value)} placeholder="Ex: Inês Costa" required autoFocus />
+              </label>
+            )}
             <div className="span-2">
               <span className="log-label">Cargo</span>
               <Select value={form.role} onChange={set("role")} options={ROLE_OPTIONS} ariaLabel="Cargo" />
             </div>
-            <label>
+            <label className={isMember ? "span-2" : undefined}>
               <span className="log-label">Email</span>
               <input
                 className="glass-input"
                 type="email"
                 value={form.email}
                 onChange={(e) => set("email")(e.target.value)}
-                placeholder={slug ? `${slug}@gmail.com` : "nome@gmail.com"}
+                placeholder={isMember ? "nome@gmail.com" : slug ? `${slug}@gmail.com` : "nome@gmail.com"}
+                required={isMember}
+                autoFocus={isMember}
               />
             </label>
-            <label>
-              <span className="log-label">Password inicial</span>
-              <input
-                className="glass-input"
-                value={form.password}
-                onChange={(e) => set("password")(e.target.value)}
-                placeholder={slug ? `${slug}123` : "nome123"}
-              />
-            </label>
+            {!isMember && (
+              <label>
+                <span className="log-label">Password inicial</span>
+                <input
+                  className="glass-input"
+                  value={form.password}
+                  onChange={(e) => set("password")(e.target.value)}
+                  placeholder={slug ? `${slug}123` : "nome123"}
+                />
+              </label>
+            )}
           </div>
-          <p className="text-secondary add-person-hint">Se deixares o email ou a password em branco, usa-se o que aparece em sugestão.</p>
+          <p className="text-secondary add-person-hint">
+            {isMember
+              ? "A pessoa já tem de ter criado a conta em Registar — isto só a liga a este ginásio, não cria uma conta nova."
+              : "Se deixares o email ou a password em branco, usa-se o que aparece em sugestão."}
+          </p>
           {error && <p className="error-text">{error}</p>}
           <div className="schedule-form-actions">
             <button type="button" className="glass-button glass-button-secondary" onClick={onClose}>
               Cancelar
             </button>
-            <button type="submit" className="glass-button log-save-button" disabled={saving || !slug}>
+            <button type="submit" className="glass-button log-save-button" disabled={saving || (isMember ? !form.email : !slug)}>
               <IconSave size={18} />
               {saving ? "A adicionar..." : "Adicionar"}
             </button>

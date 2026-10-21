@@ -16,6 +16,8 @@
 // 2. search.openfoodfacts.org — rápida e estável, mas com menos produtos
 //    portugueses e pior relevância; usada só se a clássica falhar de vez.
 
+const { uploadImage } = require("../services/storage");
+
 const USER_AGENT = "WorkoutTracker/0.1 (https://github.com/Bruthor2014/workout-tracker)";
 const CLASSIC_SEARCH_URL = "https://world.openfoodfacts.org/cgi/search.pl";
 const FALLBACK_SEARCH_URL = "https://search.openfoodfacts.org/search";
@@ -134,13 +136,21 @@ async function searchFoods(req, res) {
 }
 
 // POST /api/foods/photo — foto própria de um alimento (ex: algo que não
-// existe no Open Food Facts). O ficheiro já foi gravado pelo multer; devolve
-// o caminho para guardar no item do plano.
-function uploadFoodPhoto(req, res) {
+// existe no Open Food Facts). O ficheiro já está em memória (ver
+// middleware/upload.js); devolve o caminho para guardar no item do plano.
+async function uploadFoodPhoto(req, res) {
   if (!req.file) {
     return res.status(400).json({ message: "Nenhuma imagem enviada." });
   }
-  res.status(201).json({ image_url: `/uploads/foods/${req.file.filename}` });
+  const imageUrl = await uploadImage({
+    buffer: req.file.buffer,
+    mimetype: req.file.mimetype,
+    originalname: req.file.originalname,
+    folder: "foods",
+    prefix: "food",
+    userId: req.user.id,
+  });
+  res.status(201).json({ image_url: imageUrl });
 }
 
 module.exports = { searchFoods, uploadFoodPhoto };

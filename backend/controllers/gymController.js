@@ -254,10 +254,12 @@ async function searchUsers(req, res) {
   res.json(result.rows);
 }
 
-// PATCH /api/gym/users/:id — DONO altera o gym_id e/ou role de um utilizador.
+// PATCH /api/gym/users/:id — DONO altera o nome, gym_id e/ou role de um
+// utilizador. Nunca mexe na password de ninguém (isso só a própria pessoa
+// pode mudar, em /api/users/me — ver userController.js).
 async function patchUser(req, res) {
   const userId = Number(req.params.id);
-  const { gym_id, role } = req.body;
+  const { name, gym_id, role } = req.body;
 
   const user = await pool.query("SELECT id, role FROM users WHERE id = $1", [userId]);
   if (!user.rows[0]) return res.status(404).json({ message: "Utilizador não encontrado." });
@@ -265,6 +267,11 @@ async function patchUser(req, res) {
   const updates = [];
   const params = [];
 
+  if (name !== undefined) {
+    if (!name.trim()) return res.status(400).json({ message: "O nome não pode ficar vazio." });
+    params.push(name.trim().slice(0, 150));
+    updates.push(`name = $${params.length}`);
+  }
   if (gym_id !== undefined) {
     params.push(gym_id === null ? null : Number(gym_id));
     updates.push(`gym_id = $${params.length}`);

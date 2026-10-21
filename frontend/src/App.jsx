@@ -24,6 +24,7 @@ const MemberDetailPage    = lazy(() => import("./pages/MemberDetailPage"));
 const MessagesPage        = lazy(() => import("./pages/MessagesPage"));
 const GroupClassesPage    = lazy(() => import("./pages/GroupClassesPage"));
 const MySchedulePage      = lazy(() => import("./pages/MySchedulePage"));
+const MyFinancePage       = lazy(() => import("./pages/MyFinancePage"));
 const TeamSchedulePage    = lazy(() => import("./pages/TeamSchedulePage"));
 const ManagementPage      = lazy(() => import("./pages/ManagementPage"));
 const ClientsPage         = lazy(() => import("./pages/ClientsPage"));
@@ -32,6 +33,10 @@ const DonoDashboard       = lazy(() => import("./pages/DonoDashboard"));
 const FinancePage         = lazy(() => import("./pages/FinancePage"));
 const OccupancyPage       = lazy(() => import("./pages/OccupancyPage"));
 const StaffAttendancePage = lazy(() => import("./pages/StaffAttendancePage"));
+const FriendsPage         = lazy(() => import("./pages/FriendsPage"));
+const FriendComparePage   = lazy(() => import("./pages/FriendComparePage"));
+const InvitePage          = lazy(() => import("./pages/InvitePage"));
+const VerifyEmailPage     = lazy(() => import("./pages/VerifyEmailPage"));
 
 function PageLoader() {
   return (
@@ -81,6 +86,10 @@ export default function App() {
               </RedirectIfAuthed>
             }
           />
+          {/* Funciona com ou sem sessão — não leva o RedirectIfAuthed das
+              outras rotas deste grupo. */}
+          <Route path="/invite/:code" element={<InvitePage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
         </Route>
 
         <Route element={<AppLayout />}>
@@ -148,6 +157,22 @@ export default function App() {
             }
           />
           <Route
+            path="/friends"
+            element={
+              <NotForOwner>
+                <FriendsPage />
+              </NotForOwner>
+            }
+          />
+          <Route
+            path="/friends/:id"
+            element={
+              <NotForOwner>
+                <FriendComparePage />
+              </NotForOwner>
+            }
+          />
+          <Route
             path="/members"
             element={
               <RequireStaff>
@@ -176,6 +201,14 @@ export default function App() {
             element={
               <RequireRole roles={TEAM_ROLES}>
                 <MySchedulePage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/my-finance"
+            element={
+              <RequireRole roles={TEAM_ROLES}>
+                <MyFinancePage />
               </RequireRole>
             }
           />

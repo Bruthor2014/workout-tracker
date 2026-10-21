@@ -11,6 +11,25 @@ const base = {
   strokeLinejoin: "round",
 };
 
+export function IconMenu({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <line x1="4" y1="7" x2="20" y2="7" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <line x1="4" y1="17" x2="20" y2="17" />
+    </svg>
+  );
+}
+
+export function IconX({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <line x1="6" y1="6" x2="18" y2="18" />
+      <line x1="18" y1="6" x2="6" y2="18" />
+    </svg>
+  );
+}
+
 export function IconDumbbell({ size = 24, className }) {
   return (
     <svg {...base} width={size} height={size} className={className}>
@@ -126,6 +145,48 @@ export function IconUsers({ size = 24, className }) {
       <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" />
       <circle cx="17.5" cy="9" r="2.3" />
       <path d="M15.5 14.2c2.6.5 4.5 2.7 4.5 5.8" />
+    </svg>
+  );
+}
+
+export function IconUser({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <circle cx="12" cy="8" r="3.6" />
+      <path d="M4.5 20.5c0-4.1 3.4-7.5 7.5-7.5s7.5 3.4 7.5 7.5" />
+    </svg>
+  );
+}
+
+export function IconUserPlus({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <circle cx="9.5" cy="8" r="3.4" />
+      <path d="M3 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5" />
+      <line x1="18.5" y1="6" x2="18.5" y2="12" />
+      <line x1="15.5" y1="9" x2="21.5" y2="9" />
+    </svg>
+  );
+}
+
+export function IconShare({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <circle cx="18" cy="5" r="2.4" />
+      <circle cx="6" cy="12" r="2.4" />
+      <circle cx="18" cy="19" r="2.4" />
+      <line x1="8.1" y1="10.8" x2="15.9" y2="6.2" />
+      <line x1="8.1" y1="13.2" x2="15.9" y2="17.8" />
+    </svg>
+  );
+}
+
+export function IconLink({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <path d="M9 12h6" />
+      <path d="M10.5 17H8a5 5 0 0 1 0-10h2.5" />
+      <path d="M13.5 7H16a5 5 0 0 1 0 10h-2.5" />
     </svg>
   );
 }

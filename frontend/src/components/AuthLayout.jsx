@@ -8,7 +8,7 @@ export default function AuthLayout() {
     <div className="auth-layout">
       <div className="auth-layout-brand">
         <IconLogoMark size={26} />
-        <span>Workout Tracker</span>
+        <span>Ironbound</span>
       </div>
       <Outlet />
     </div>

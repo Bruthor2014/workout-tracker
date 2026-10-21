@@ -28,38 +28,44 @@ function useWidth(ref) {
   return width;
 }
 
-// Gráfico semanal de UMA série (por isso sem legenda — o título do cartão
-// diz o que é). `points`: [{ label, tooltipLabel, value }]. `kind`: "bar"
-// (barras) ou "line" (linha com área suave). `formatValue` formata os
-// valores no eixo e na tooltip. Passar o rato (ou tocar) numa semana mostra
-// a tooltip com o valor exato.
-export default function ProgressChart({ points, kind = "bar", color, formatValue, ariaLabel }) {
+// Gráfico semanal de uma ou duas séries. `points`: [{ label, tooltipLabel,
+// value }]. `kind`: "bar" (barras) ou "line" (linha com área suave). Sem
+// `points2` fica igual ao perfil (uma série só, sem legenda — o título do
+// cartão diz o que é). Com `points2` (ex: comparação com um amigo), essa
+// segunda série desenha-se sempre como linha tracejada por cima — a
+// primeira mantém o seu estilo normal (bar ou linha), mesmo com as duas.
+// `formatValue` formata os valores no eixo e na tooltip. Passar o rato (ou
+// tocar) numa semana mostra a tooltip com os valores dessa semana.
+export default function ProgressChart({ points, kind = "bar", color, points2, color2, formatValue, ariaLabel }) {
   const wrapRef = useRef(null);
   const width = useWidth(wrapRef);
   const [hovered, setHovered] = useState(null);
 
   const plotW = Math.max(0, width - PAD.left - PAD.right);
   const plotH = HEIGHT - PAD.top - PAD.bottom;
-  const { top, step } = niceScale(Math.max(...points.map((p) => p.value), 0));
+  const maxValue = Math.max(...points.map((p) => p.value), ...(points2 ? points2.map((p) => p.value) : []), 0);
+  const { top, step } = niceScale(maxValue);
   const ticks = Array.from({ length: Math.round(top / step) + 1 }, (_, i) => i * step);
   const band = points.length ? plotW / points.length : 0;
   const xCenter = (i) => PAD.left + band * i + band / 2;
   const yAt = (v) => PAD.top + plotH - (v / top) * plotH;
   const baseline = PAD.top + plotH;
   // Com bandas estreitas (telemóvel) só se mostra uma etiqueta sim, outra não.
-  const labelEvery = band < 34 ? 2 : 1;
+  const labelEvery = band < 18 ? 4 : band < 34 ? 2 : 1;
 
   const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${xCenter(i)},${yAt(p.value)}`).join(" ");
   const areaPath = points.length
     ? `${linePath} L${xCenter(points.length - 1)},${baseline} L${xCenter(0)},${baseline} Z`
     : "";
+  const line2Path = points2 ? points2.map((p, i) => `${i === 0 ? "M" : "L"}${xCenter(i)},${yAt(p.value)}`).join(" ") : "";
 
   const active = hovered != null ? points[hovered] : null;
+  const active2 = hovered != null && points2 ? points2[hovered] : null;
 
   return (
     <div className="progress-chart-box" ref={wrapRef} onMouseLeave={() => setHovered(null)}>
       {width > 0 && (
-        <svg width={width} height={HEIGHT} role="img" aria-label={ariaLabel} style={{ "--series": color }}>
+        <svg width={width} height={HEIGHT} role="img" aria-label={ariaLabel} style={{ "--series": color, "--series2": color2 }}>
           {ticks.map((t) => (
             <g key={t}>
               <line x1={PAD.left} x2={width - PAD.right} y1={yAt(t)} y2={yAt(t)} className="pc-grid" />
@@ -89,13 +95,23 @@ export default function ProgressChart({ points, kind = "bar", color, formatValue
             <>
               <path d={areaPath} className="pc-area" />
               <path d={linePath} className="pc-line" />
-              {hovered != null && (
-                <line x1={xCenter(hovered)} x2={xCenter(hovered)} y1={PAD.top} y2={baseline} className="pc-crosshair" />
-              )}
               {points.map((p, i) => (
                 <circle key={i} cx={xCenter(i)} cy={yAt(p.value)} r={hovered === i ? 6 : 4} className="pc-dot" />
               ))}
             </>
+          )}
+
+          {points2 && (
+            <>
+              <path d={line2Path} className="pc-line2" />
+              {points2.map((p, i) => (
+                <circle key={i} cx={xCenter(i)} cy={yAt(p.value)} r={hovered === i ? 5 : 3.2} className="pc-dot2" />
+              ))}
+            </>
+          )}
+
+          {hovered != null && (kind === "line" || points2) && (
+            <line x1={xCenter(hovered)} x2={xCenter(hovered)} y1={PAD.top} y2={baseline} className="pc-crosshair" />
           )}
 
           {points.map((p, i) =>
@@ -125,13 +141,19 @@ export default function ProgressChart({ points, kind = "bar", color, formatValue
       {active && (
         <div
           className={`pc-tooltip${xCenter(hovered) > width * 0.7 ? " align-end" : xCenter(hovered) < width * 0.3 ? " align-start" : ""}`}
-          style={{ left: xCenter(hovered), top: Math.max(0, yAt(active.value) - 10) }}
+          style={{ left: xCenter(hovered), top: Math.max(0, yAt(Math.max(active.value, active2?.value ?? 0)) - 10) }}
         >
           <span className="pc-tooltip-label">{active.tooltipLabel}</span>
           <span className="pc-tooltip-value">
             <span className="pc-tooltip-key" style={{ background: color }} />
             {formatValue(active.value, false)}
           </span>
+          {active2 && (
+            <span className="pc-tooltip-value">
+              <span className="pc-tooltip-key pc-tooltip-key-dashed" style={{ borderColor: color2 }} />
+              {formatValue(active2.value, false)}
+            </span>
+          )}
         </div>
       )}
     </div>

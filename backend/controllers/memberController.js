@@ -159,30 +159,76 @@ async function updateMemberRole(req, res) {
   res.json(result.rows[0]);
 }
 
-// POST /api/members — o CEO adiciona alguém ao ginásio (membro ou equipa),
-// já com a password inicial (a pessoa pode mudá-la depois).
+// POST /api/members — adiciona alguém ao ginásio. Dois caminhos bem
+// diferentes consoante o role:
+// - Staff (PT, nutricionista, receção, etc.): o CEO cria a conta
+//   diretamente, já com password inicial — é ele quem contrata/provisiona.
+// - 'member': NUNCA se cria conta aqui. Um sócio regista-se sozinho em
+//   /register (fica sem gym_id até ser "reclamado"), e isto só liga, pelo
+//   email, uma conta que já exista a este ginásio. Sem conta prévia, dá
+//   erro a pedir para a pessoa se registar primeiro — é essa a única
+//   situação em que deve aparecer esse erro (ver PROGRESS.txt/comentário
+//   em authController.js register()).
 async function createPerson(req, res) {
-  // Receptionist e a conta da receção só podem criar membros, não staff.
+  // Receptionist e a conta da receção só podem adicionar membros, não staff.
   const { name: rawName, email, password: rawPassword, role: rawRole = "member" } = req.body;
   const role = ["receptionist", "reception_station"].includes(req.user.role) ? "member" : rawRole;
   if (!email) return res.status(400).json({ message: "Email é obrigatório." });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ message: "Email inválido." });
+  }
+  if (!ASSIGNABLE_ROLES.includes(role)) {
+    return res.status(400).json({ message: "Role inválido." });
+  }
+  const normalizedEmail = String(email).trim().toLowerCase();
 
-  // Auto-fill name and password from email when not provided (receptionist quick-add flow)
-  const emailSlug = String(email).split("@")[0].replace(/[^a-zA-Z0-9]/g, "") || "socio";
+  if (role === "member") {
+    const existing = await pool.query(
+      `SELECT id, name, email, role, avatar_url, gym_id FROM users WHERE LOWER(email) = $1`,
+      [normalizedEmail]
+    );
+    const person = existing.rows[0];
+    if (!person) {
+      return res.status(404).json({
+        message: "Ainda não existe nenhuma conta com este email — a pessoa tem de se registar primeiro em Criar Conta.",
+      });
+    }
+    if (person.role !== "member") {
+      return res.status(400).json({ message: "Esta conta não é uma conta de sócio." });
+    }
+    if (person.gym_id) {
+      return res.status(409).json({
+        message: person.gym_id === req.user.gymId ? "Esta pessoa já está neste ginásio." : "Esta pessoa já está associada a outro ginásio.",
+      });
+    }
+    const updated = await pool.query(
+      `UPDATE users SET gym_id = $1 WHERE id = $2 RETURNING id, name, email, role, avatar_url`,
+      [req.user.gymId, person.id]
+    );
+    // Entrar no ginásio ativa logo a inscrição (paid_until fica no valor por
+    // omissão da coluna — hoje, "em dia" até ao próximo mês) — sem isto, a
+    // pessoa ficava ligada ao ginásio mas o cartão de subscrição continuava
+    // a mostrar "Inativo".
+    await pool.query(
+      `INSERT INTO member_subscriptions (member_id, service_type, is_active)
+       VALUES ($1, 'gym_membership', true)
+       ON CONFLICT (member_id, service_type) WHERE is_active DO NOTHING`,
+      [person.id]
+    );
+    return res.json(updated.rows[0]);
+  }
+
+  // Staff: continua a criar a conta diretamente, com password inicial
+  // (auto-gerada quando não indicada, como antes).
+  const emailSlug = normalizedEmail.split("@")[0].replace(/[^a-zA-Z0-9]/g, "") || "pessoa";
   const name     = rawName     || (emailSlug.charAt(0).toUpperCase() + emailSlug.slice(1));
   const password = rawPassword || (emailSlug + "123");
 
   if (!String(name).trim()) {
     return res.status(400).json({ message: "Não foi possível deduzir o nome do email. Introduz um nome manualmente." });
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ message: "Email inválido." });
-  }
   if (String(password).length < 6) {
     return res.status(400).json({ message: "A password tem de ter pelo menos 6 caracteres." });
-  }
-  if (!ASSIGNABLE_ROLES.includes(role)) {
-    return res.status(400).json({ message: "Role inválido." });
   }
   const passwordHash = await bcrypt.hash(String(password), SALT_ROUNDS);
   const result = await pool.query(
@@ -190,7 +236,7 @@ async function createPerson(req, res) {
      VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (email) DO NOTHING
      RETURNING id, name, email, role, avatar_url`,
-    [req.user.gymId, String(name).trim().slice(0, 150), String(email).trim().toLowerCase(), passwordHash, role]
+    [req.user.gymId, String(name).trim().slice(0, 150), normalizedEmail, passwordHash, role]
   );
   if (!result.rows[0]) {
     return res.status(409).json({ message: "Já existe uma conta com esse email." });

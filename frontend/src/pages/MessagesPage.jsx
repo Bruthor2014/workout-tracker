@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import GlassCard from "../components/GlassCard";
 import BroadcastModal from "../components/BroadcastModal";
+import { IconChevronRight } from "../components/Icons";
 import { apiRequest, resolveAssetUrl } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { ROLE_LABELS } from "../utils/roles";
@@ -120,7 +121,7 @@ export default function MessagesPage() {
 
       {error && <p className="error-text">{error}</p>}
 
-      <div className="messages-layout">
+      <div className={`messages-layout${selectedId ? " has-selection" : ""}`}>
         <GlassCard className="messages-contacts" strong>
           <div style={{ padding: "10px 12px 0" }}>
             <input
@@ -175,6 +176,9 @@ export default function MessagesPage() {
           {selectedId && (
             <>
               <div className="messages-thread-header">
+                <button type="button" className="messages-back" onClick={() => setSelectedId(null)} aria-label="Voltar às conversas">
+                  <IconChevronRight size={20} />
+                </button>
                 <strong>{selectedContact?.name}</strong>
                 {selectedContact && (
                   <span className="text-secondary"> · {ROLE_LABELS[selectedContact.role] || selectedContact.role}</span>

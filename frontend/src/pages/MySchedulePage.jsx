@@ -10,79 +10,6 @@ import { INSTRUCTOR_ROLES } from "../utils/roles";
 import { SESSION_COLOR, classKind, durationHours, sessionLabel, shiftActivity, weekdayName } from "../utils/schedule";
 
 const HAS_CLIENTS = ["personal_trainer", "nutritionist"];
-const ACTIVITY_LABELS = { floor: "Sala", class: "Aula", reception: "Receção", assessments: "Avaliações", admin: "Admin", other: "Outro" };
-
-function fmtEuro(v) { return `${Number(v || 0).toFixed(2).replace(".", ",")} €`; }
-function fmtDate(s) { if (!s) return ""; const d = new Date(s); return d.toLocaleDateString("pt-PT"); }
-
-function prevMonth(ym) {
-  const [y, m] = ym.split("-").map(Number);
-  const d = new Date(y, m - 2, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-function nextMonth(ym) {
-  const [y, m] = ym.split("-").map(Number);
-  const d = new Date(y, m, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-function currentYM() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-function monthLabel(ym) {
-  const [y, m] = ym.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
-}
-
-function ExtClientFeeRow({ ec }) {
-  const [fee, setFee] = useState(String(ec.monthly_fee || "0"));
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  async function handleSave() {
-    setSaving(true); setSaved(false);
-    try {
-      await apiRequest(`/finance/my/ext-client/${ec.id}/fee`, { method: "PUT", body: { monthly_fee: Number(fee) } });
-      ec.monthly_fee = Number(fee);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } finally { setSaving(false); }
-  }
-
-  return (
-    <GlassCard style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 12 }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, fontSize: "0.9rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ec.client_name}</div>
-        <div className="text-secondary" style={{ fontSize: "0.75rem" }}>{ec.client_email}</div>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-        <input type="number" min="0" step="0.01" className="glass-input"
-          style={{ width: 80, textAlign: "right", fontSize: "0.85rem" }}
-          value={fee} onChange={(e) => setFee(e.target.value)} />
-        <span className="text-secondary" style={{ fontSize: "0.8rem" }}>€/mês</span>
-        <button className="glass-button" style={{ padding: "4px 10px", fontSize: "0.78rem" }}
-          onClick={handleSave} disabled={saving}>
-          {saved ? "✓" : saving ? "..." : "Guardar"}
-        </button>
-      </div>
-    </GlassCard>
-  );
-}
-
-function calcEarnings(rates, week) {
-  if (!rates) return { gross: 0, cut: 0, net: 0 };
-  const base = Number(rates.base_salary || 0);
-  const hSala = Number(rates.rate_sala_h || 0) * Number(week.hours_sala || 0);
-  const hRec  = Number(rates.rate_reception_h || 0) * Number(week.hours_reception || 0);
-  const hCls  = Number(rates.rate_class_h || 0) * Number(week.hours_class || 0);
-  const ptEarnings = Number(rates.rate_pt_month || 0) * Number(week.pt_clients_count || 0);
-  const gross = base + hSala + hRec + hCls + ptEarnings;
-  let cut = 0;
-  if (rates.gym_cut_pct != null)        cut = ptEarnings * Number(rates.gym_cut_pct) / 100;
-  else if (rates.gym_cut_fixed != null) cut = Number(week.pt_clients_count || 0) * Number(rates.gym_cut_fixed);
-  const absent = Number(week.absent_deduction || 0);
-  return { gross, cut, net: gross - cut - absent };
-}
 
 const fmtHours = (h) => `${h.toLocaleString("pt-PT", { maximumFractionDigits: 1 })} h`;
 
@@ -165,11 +92,6 @@ export default function MySchedulePage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // Rendimento
-  const [financeMonth, setFinanceMonth] = useState(prevMonth(currentYM()));
-  const [financeData, setFinanceData] = useState(null);
-  const [payments, setPayments] = useState([]);
-
   useEffect(() => {
     Promise.all([
       apiRequest("/shifts/me"),
@@ -183,17 +105,7 @@ export default function MySchedulePage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-
-    apiRequest("/finance/my/payments")
-      .then(setPayments)
-      .catch(() => {});
   }, [user.role]);
-
-  useEffect(() => {
-    apiRequest(`/finance/my?month=${financeMonth}`)
-      .then(setFinanceData)
-      .catch(() => {});
-  }, [financeMonth]);
 
   const myClasses = classes.filter((c) => c.instructor_id === user.id);
   const openClasses = INSTRUCTOR_ROLES.includes(user.role)
@@ -306,142 +218,6 @@ export default function MySchedulePage() {
       )}
 
       {selected && <ItemDetailModal item={selected} onClose={() => setSelected(null)} />}
-
-      {/* ── Rendimento ── */}
-      <div style={{ marginTop: 32 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-          <h2 style={{ margin: 0, fontSize: "1.1rem" }}>Rendimento</h2>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <button className="glass-button glass-button-secondary" style={{ padding: "4px 10px" }}
-              onClick={() => setFinanceMonth(prevMonth(financeMonth))}>‹</button>
-            <span style={{ minWidth: 120, textAlign: "center", fontSize: "0.92rem", textTransform: "capitalize" }}>
-              {monthLabel(financeMonth)}
-            </span>
-            <button className="glass-button glass-button-secondary" style={{ padding: "4px 10px" }}
-              disabled={financeMonth >= currentYM()}
-              onClick={() => setFinanceMonth(nextMonth(financeMonth))}>›</button>
-          </div>
-        </div>
-
-        {financeData && (
-          <>
-            {/* Resumo semanal do mês */}
-            {financeData.weeks.length === 0 ? (
-              <p className="text-secondary">Sem registos para este mês.</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-                {financeData.weeks.map((w, i) => {
-                  const { gross, cut, net } = calcEarnings(financeData.rates, w);
-                  return (
-                    <GlassCard key={i} style={{ padding: "12px 16px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-                        <div>
-                          <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>
-                            Semana de {fmtDate(w.week_start)}
-                          </div>
-                          <div className="text-secondary" style={{ fontSize: "0.8rem", marginTop: 2 }}>
-                            {Number(w.hours_sala) > 0 && `Sala ${w.hours_sala}h  `}
-                            {Number(w.hours_reception) > 0 && `Receção ${w.hours_reception}h  `}
-                            {Number(w.hours_class) > 0 && `Aulas ${w.hours_class}h  `}
-                            {Number(w.pt_clients_count) > 0 && `${w.pt_clients_count} clientes PT`}
-                          </div>
-                          {Number(w.absent_hours) > 0 && (
-                            <div style={{ fontSize: "0.78rem", color: "#f87171", marginTop: 2 }}>
-                              Faltou {w.absent_hours}h · desconto {fmtEuro(w.absent_deduction)}
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ textAlign: "right", fontSize: "0.85rem" }}>
-                          <div className="text-secondary">Bruto: {fmtEuro(gross)}</div>
-                          {cut > 0 && <div style={{ color: "#4ade80" }}>Ginásio: – {fmtEuro(cut)}</div>}
-                          <div style={{ fontWeight: 600 }}>A receber: {fmtEuro(net)}</div>
-                        </div>
-                      </div>
-                    </GlassCard>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Presenças do mês */}
-            {financeData.attendance.length > 0 && (
-              <>
-                <h3 style={{ fontSize: "0.95rem", margin: "16px 0 8px" }}>Presenças</h3>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  {financeData.attendance.map((a, i) => {
-                    const statusColor = a.status === "absent" ? "#f87171"
-                      : a.status === "adjusted" ? "#f59e0b"
-                      : a.status === "present" ? "#4ade80"
-                      : "var(--text-secondary)";
-                    const statusLabel = a.status === "absent" ? "Falta"
-                      : a.status === "adjusted" ? `Ajustado (−${Number(a.deducted_hours).toFixed(1)}h)`
-                      : a.status === "present" ? "Presente"
-                      : "A aguardar";
-                    const bgColor = a.status === "absent" ? "rgba(248,113,113,0.08)"
-                      : a.status === "adjusted" ? "rgba(245,158,11,0.07)"
-                      : a.status === "present" ? "rgba(74,222,128,0.06)"
-                      : "rgba(255,255,255,0.03)";
-                    return (
-                      <div key={i} style={{ display: "flex", gap: 10, fontSize: "0.82rem", padding: "5px 10px",
-                        borderRadius: 8, background: bgColor }}>
-                        <span style={{ minWidth: 80, color: "var(--text-secondary)" }}>{fmtDate(a.shift_date)}</span>
-                        <span>{a.start_time}–{a.end_time}</span>
-                        <span className="text-secondary">{ACTIVITY_LABELS[a.activity] || a.activity}</span>
-                        <span style={{ marginLeft: "auto", fontWeight: 600, color: statusColor }}>
-                          {statusLabel}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </>
-        )}
-
-        {/* Clientes externos — PT define o valor mensal de cada um */}
-        {financeData?.external_clients?.length > 0 && (
-          <>
-            <h3 style={{ fontSize: "0.95rem", margin: "20px 0 8px" }}>Clientes externos</h3>
-            <p className="text-secondary" style={{ fontSize: "0.78rem", marginBottom: 10 }}>
-              100% do valor fica para ti. Define aqui quanto cobras a cada cliente por mês.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {financeData.external_clients.map((ec) => (
-                <ExtClientFeeRow key={ec.id} ec={ec} />
-              ))}
-            </div>
-            <div style={{ textAlign: "right", marginTop: 8, fontSize: "0.88rem", fontWeight: 600 }}>
-              Total externos: {fmtEuro(financeData.external_clients.reduce((a, c) => a + Number(c.monthly_fee || 0), 0))}
-            </div>
-          </>
-        )}
-
-        {/* Histórico de pagamentos confirmados */}
-        {payments.length > 0 && (
-          <>
-            <h3 style={{ fontSize: "0.95rem", margin: "24px 0 8px" }}>Histórico de pagamentos</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {payments.map((p, i) => (
-                <GlassCard key={i} style={{ padding: "10px 16px", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-                  <div>
-                    <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{monthLabel(p.month_year)}</span>
-                    <div className="text-secondary" style={{ fontSize: "0.78rem", marginTop: 2 }}>
-                      Pago em {fmtDate(p.paid_at)}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right", fontSize: "0.85rem" }}>
-                    <div className="text-secondary">Bruto: {fmtEuro(p.gross)}</div>
-                    {Number(p.gym_cut) > 0 && <div style={{ color: "#4ade80" }}>Ginásio: – {fmtEuro(p.gym_cut)}</div>}
-                    {Number(p.absent_deduction) > 0 && <div style={{ color: "#f87171" }}>Faltas: – {fmtEuro(p.absent_deduction)}</div>}
-                    <div style={{ fontWeight: 700 }}>Recebido: {fmtEuro(p.net)}</div>
-                  </div>
-                </GlassCard>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
     </div>
   );
 }

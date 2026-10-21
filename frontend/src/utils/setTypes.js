@@ -84,3 +84,12 @@ const BY_VALUE = new Map(SET_TYPES.map((type) => [type.value, type]));
 export function setTypeInfo(value) {
   return BY_VALUE.get(value) || SET_TYPES[0];
 }
+
+// Opções do seletor de técnica (registo de treino e planos): cor e
+// explicação de cada uma.
+export const TECHNIQUE_OPTIONS = SET_TYPES.map((type) => ({
+  value: type.value,
+  label: type.label,
+  color: type.color || "var(--accent)",
+  description: type.hint || "Séries normais, com descanso entre elas.",
+}));

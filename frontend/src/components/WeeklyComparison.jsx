@@ -141,7 +141,11 @@ function LineChart({ weeks }) {
             height={height}
             fill="transparent"
             onMouseEnter={() => setHovered(i)}
-            onClick={() => setHovered(i)}
+            // Em toque não há "sair com o rato" (onMouseLeave, usado no
+            // desktop) — sem isto, a tooltip de um toque ficava presa
+            // para sempre, sobreposta ao resto do cartão. Tocar outra vez
+            // no mesmo ponto fecha-a.
+            onClick={() => setHovered((prev) => (prev === i ? null : i))}
           />
         ))}
       </svg>

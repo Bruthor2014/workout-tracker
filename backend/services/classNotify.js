@@ -26,7 +26,10 @@ async function ownerId(gymId) {
   return result.rows[0] ? result.rows[0].id : null;
 }
 
-// Envia `body` a todos os PTs do ginasio (exceto `excludeId`).
+// Envia `body` a todos os PTs e estagiarios do ginasio (exceto
+// `excludeId`) -- quem pode mesmo dar/ficar com aulas por troca. Os
+// nutricionistas tambem podem ser responsaveis por uma aula, mas nao
+// recebem estes avisos de propósito (decisão do CEO).
 async function messageAllPTs(gymId, body, excludeId) {
   if (excludeId === undefined) excludeId = null;
   const senderId = await ownerId(gymId);
@@ -34,7 +37,7 @@ async function messageAllPTs(gymId, body, excludeId) {
   const result = await pool.query(
     "INSERT INTO messages (sender_id, recipient_id, body) " +
     "SELECT $1, id, $2 FROM users " +
-    "WHERE gym_id = $3 AND role = 'personal_trainer' AND id <> $1 AND ($4::int IS NULL OR id <> $4) " +
+    "WHERE gym_id = $3 AND role IN ('personal_trainer', 'intern') AND id <> $1 AND ($4::int IS NULL OR id <> $4) " +
     "RETURNING id",
     [senderId, body, gymId, excludeId]
   );
@@ -65,4 +68,17 @@ async function notifySubstituteRequest(gymId, gymClass, requesterName, reason, r
   return messageAllPTs(gymId, body, requesterId);
 }
 
-module.exports = { notifyVacantClasses, notifySubstituteRequest, messageAllPTs };
+// Uma vaga confirmada abriu-se e esta pessoa (1a da lista de espera) foi
+// promovida automaticamente.
+async function notifyWaitlistPromotion(gymId, gymClass, memberId) {
+  const senderId = await ownerId(gymId);
+  if (!senderId || !memberId) return 0;
+  const body = "🎉 Abriu-se uma vaga na aula de " + describe(gymClass) + " e ficaste inscrito (saíste da lista de espera)!";
+  const result = await pool.query(
+    "INSERT INTO messages (sender_id, recipient_id, body) VALUES ($1, $2, $3) RETURNING id",
+    [senderId, memberId, body]
+  );
+  return result.rowCount;
+}
+
+module.exports = { notifyVacantClasses, notifySubstituteRequest, notifyWaitlistPromotion, messageAllPTs };

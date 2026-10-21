@@ -2,7 +2,7 @@ import { useState } from "react";
 import { WEEKDAYS, todayWeekday, toMinutes } from "../utils/schedule";
 
 const HOUR_HEIGHT = 84; // px por hora na grelha (uma aula de 1h mostra hora, nome, responsável e etiqueta)
-const DENSE_HOUR_HEIGHT = 44; // modo compacto: linhas de 30 em 30 min, blocos pequenos
+const DENSE_HOUR_HEIGHT = 27; // modo compacto: a semana toda (06h-23h) cabe no ecrã sem scroll
 // O ginásio abre às 06:00 e fecha às 23:00.
 const DEFAULT_START = 6;
 const DEFAULT_END = 23;
@@ -42,8 +42,10 @@ function layoutDay(dayItems) {
 // Horário semanal (Seg–Dom × horas), estilo tabela de horário. Cada item:
 // { id, weekday, start_time, end_time, title, subtitle?, color, badge?,
 //   status? ("vacant" | "warning" | "cancelled"), order? }. Em ecrãs
-// estreitos passa a uma lista por dia. `onItemClick(item)` é opcional (sem
-// ele os itens não são clicáveis). `dense`: grelha de meia em meia hora com
+// estreitos a grelha desliza horizontalmente dentro do seu próprio
+// cartão (ver .tt-grid-wrap) em vez de trocar para outra vista — fica
+// igual ao desktop em todos os tamanhos. `onItemClick(item)` é opcional
+// (sem ele os itens não são clicáveis). `dense`: grelha de meia em meia hora com
 // blocos pequenos e minimalistas (só nome e atividade). `lanes` (opcional):
 // faixas fixas em todos os dias (ex: ["Sala", "Sala", "Receção"]) — cada
 // item diz a sua em `item.lane`, e as colunas ficam alinhadas na semana toda.
@@ -116,79 +118,61 @@ export default function WeekTimetable({
 
   return (
     <div className={`timetable${dense ? " dense" : ""}`}>
-      {/* Grelha (ecrãs largos) */}
-      <div className="tt-grid" style={{ "--hours": hours.length, "--hour-height": `${hourHeight}px` }}>
-        <div className="tt-corner" />
-        {WEEKDAYS.map((d) => (
-          <div key={d.value} className={`tt-day-head${d.value === today ? " today" : ""}${d.value % 2 === 0 ? " alt" : ""}`}>
-            <span className="tt-day-name">{d.short}</span>
-            {lanes && (
-              <span className="tt-lanes">
-                {lanes.map((l, i) => (
-                  <span key={i}>{l}</span>
-                ))}
+      {/* A grelha é sempre a grelha, mesmo em ecrãs estreitos — quando não
+          cabe, o wrapper desliza horizontalmente em vez de trocar para uma
+          lista (mantém a app igual ao desktop, como no telemóvel). */}
+      <div className="tt-grid-wrap">
+        <div className="tt-grid" style={{ "--hours": hours.length, "--hour-height": `${hourHeight}px` }}>
+          <div className="tt-corner" />
+          {WEEKDAYS.map((d) => (
+            <div key={d.value} className={`tt-day-head${d.value === today ? " today" : ""}${d.value % 2 === 0 ? " alt" : ""}`}>
+              <span className="tt-day-name">{d.short}</span>
+              {lanes && (
+                <span className="tt-lanes">
+                  {lanes.map((l, i) => (
+                    <span key={i}>{l}</span>
+                  ))}
+                </span>
+              )}
+            </div>
+          ))}
+          <div className="tt-hours">
+            {hours.map((h) => (
+              <span key={h} className="tt-hour">
+                {String(h).padStart(2, "0")}:00
+                {dense && <span className="tt-hour-half">{String(h).padStart(2, "0")}:30</span>}
               </span>
-            )}
+            ))}
           </div>
-        ))}
-        <div className="tt-hours">
-          {hours.map((h) => (
-            <span key={h} className="tt-hour">
-              {String(h).padStart(2, "0")}:00
-              {dense && <span className="tt-hour-half">{String(h).padStart(2, "0")}:30</span>}
-            </span>
+          {WEEKDAYS.map((d) => (
+            <div key={d.value} className={`tt-day${d.value === today ? " today" : ""}${d.value % 2 === 0 ? " alt" : ""}`}>
+              {hours.map((h) => (
+                <span key={h} className="tt-slot" />
+              ))}
+              {(lanes
+                ? items.filter((i) => Number(i.weekday) === d.value).map((item) => ({ item, col: item.lane, cols: lanes.length }))
+                : layoutDay(items.filter((i) => Number(i.weekday) === d.value))
+              ).map(({ item, col, cols }) => {
+                const top = ((toMinutes(item.start_time) - startHour * 60) / 60) * hourHeight;
+                const minutes = toMinutes(item.end_time) - toMinutes(item.start_time);
+                const height = (minutes / 60) * hourHeight;
+                const gap = dense ? 2 : 3;
+                return renderItem(
+                  item,
+                  {
+                    top: top + 1,
+                    height: Math.max(height - gap, 18),
+                    // --day-pad: margem de cada lado do dia (separa os dias).
+                    left: `calc(var(--day-pad, 0px) + (100% - 2 * var(--day-pad, 0px)) * ${col / cols} + ${gap}px)`,
+                    width: `calc((100% - 2 * var(--day-pad, 0px)) / ${cols} - ${gap * 2}px)`,
+                  },
+                  !dense && minutes < 60,
+                  dense && cols >= 3
+                );
+              })}
+            </div>
           ))}
         </div>
-        {WEEKDAYS.map((d) => (
-          <div key={d.value} className={`tt-day${d.value === today ? " today" : ""}${d.value % 2 === 0 ? " alt" : ""}`}>
-            {hours.map((h) => (
-              <span key={h} className="tt-slot" />
-            ))}
-            {(lanes
-              ? items.filter((i) => Number(i.weekday) === d.value).map((item) => ({ item, col: item.lane, cols: lanes.length }))
-              : layoutDay(items.filter((i) => Number(i.weekday) === d.value))
-            ).map(({ item, col, cols }) => {
-              const top = ((toMinutes(item.start_time) - startHour * 60) / 60) * hourHeight;
-              const minutes = toMinutes(item.end_time) - toMinutes(item.start_time);
-              const height = (minutes / 60) * hourHeight;
-              const gap = dense ? 2 : 3;
-              return renderItem(
-                item,
-                {
-                  top: top + 1,
-                  height: Math.max(height - gap, 18),
-                  // --day-pad: margem de cada lado do dia (separa os dias).
-                  left: `calc(var(--day-pad, 0px) + (100% - 2 * var(--day-pad, 0px)) * ${col / cols} + ${gap}px)`,
-                  width: `calc((100% - 2 * var(--day-pad, 0px)) / ${cols} - ${gap * 2}px)`,
-                },
-                !dense && minutes < 60,
-                dense && cols >= 3
-              );
-            })}
-          </div>
-        ))}
-      </div>
-
-      {/* Lista por dia (ecrãs estreitos) */}
-      <div className="tt-list">
-        {WEEKDAYS.map((d) => {
-          const dayItems = items
-            .filter((i) => Number(i.weekday) === d.value)
-            .sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time) || (a.order ?? 0) - (b.order ?? 0));
-          return (
-            <section key={d.value} className={`tt-list-day${d.value === today ? " today" : ""}`}>
-              <h4>
-                {d.long}
-                {d.value === today && <span className="week-day-today static">Hoje</span>}
-              </h4>
-              {dayItems.length ? (
-                <div className={dense ? "tt-list-chips" : undefined}>{dayItems.map((item) => renderItem(item, {}))}</div>
-              ) : (
-                <p className="text-secondary">—</p>
-              )}
-            </section>
-          );
-        })}
       </div>
 
       {items.length === 0 && <p className="tt-empty text-secondary">{emptyText}</p>}

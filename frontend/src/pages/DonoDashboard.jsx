@@ -102,6 +102,7 @@ const ASSIGNABLE_ROLES = [
 ];
 
 function EditUserModal({ user, gyms, onClose, onSaved }) {
+  const [name, setName] = useState(user.name);
   const [gymId, setGymId] = useState(user.gym_id ? String(user.gym_id) : "");
   const [role, setRole] = useState(user.role);
   const [error, setError] = useState("");
@@ -112,6 +113,7 @@ function EditUserModal({ user, gyms, onClose, onSaved }) {
     setError("");
     try {
       const body = {
+        name,
         gym_id: gymId ? Number(gymId) : null,
         role,
       };
@@ -130,10 +132,13 @@ function EditUserModal({ user, gyms, onClose, onSaved }) {
 
   return (
     <Modal onClose={onClose}>
-      <GlassCard className="preview-card" strong style={{ minWidth: 340 }}>
-        <h3>{user.name}</h3>
+      <GlassCard className="preview-card" strong style={{ minWidth: "min(340px, 100%)" }}>
         <p className="text-secondary" style={{ marginTop: 0 }}>{user.email}</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label className="field-label">Nome</label>
+            <input className="glass-input" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
           <div>
             <label className="field-label">Ginásio</label>
             <Select value={gymId} onChange={setGymId} options={gymOptions} ariaLabel="Ginásio" />
@@ -197,7 +202,7 @@ function GymDetailModal({ gymId, onClose, onDeleted, onChangeOwner }) {
 
   return (
     <Modal onClose={onClose}>
-      <GlassCard className="preview-card" strong style={{ minWidth: 380, maxWidth: 520, width: "90vw" }}>
+      <GlassCard className="preview-card" strong style={{ minWidth: "min(380px, 100%)", maxWidth: 520, width: "90vw" }}>
         {loading ? (
           <p className="text-secondary">A carregar...</p>
         ) : !detail ? (
@@ -381,7 +386,14 @@ export default function DonoDashboard() {
                   <span className="member-tile-email">
                     {g.owner_name ? `CEO: ${g.owner_name}` : "Sem CEO"}
                   </span>
-                  {g.owner_email && <span className="text-secondary" style={{ fontSize: "0.78rem" }}>{g.owner_email}</span>}
+                  {g.owner_email && (
+                    <span
+                      className="text-secondary"
+                      style={{ fontSize: "0.78rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    >
+                      {g.owner_email}
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="member-tile-stats">

@@ -115,7 +115,11 @@ export default function DashboardPage() {
     <div className="page-container">
       <div className="page-header">
         <h1>Os teus treinos</h1>
-        <Link to="/log" className="glass-button" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <Link
+          to="/log"
+          className="glass-button dashboard-header-log-cta"
+          style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+        >
           <IconPlusCircle size={18} />
           Registar treino
         </Link>

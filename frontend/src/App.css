@@ -68,7 +68,7 @@
   align-items: center;
   gap: 14px;
   padding: 13px 16px;
-  border-radius: 14px;
+  border-radius: 6px;
   font-size: 1.05rem;
   font-weight: 500;
   color: rgba(221, 226, 255, 0.7);
@@ -89,7 +89,7 @@
 }
 
 .sidebar-link.active .sidebar-link-icon {
-  color: #ede9fe;
+  color: var(--accent);
 }
 
 .sidebar-badge {
@@ -116,10 +116,10 @@
 
 /* Ativo: gradiente roxo suave + barra brilhante à esquerda. */
 .sidebar-link.active {
-  background: linear-gradient(90deg, rgba(var(--accent-strong-rgb), 0.45), rgba(var(--accent-deep-rgb), 0.15));
-  color: white;
+  background: var(--glass-bg);
+  color: var(--text-primary);
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.3), 0 4px 16px rgba(var(--accent-deep-rgb), 0.25);
+  box-shadow: none;
 }
 
 .sidebar-link.active::before {
@@ -128,9 +128,9 @@
   left: 0;
   top: 8px;
   bottom: 8px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: linear-gradient(180deg, #e9d5ff, var(--accent));
+  width: 2px;
+  border-radius: 0;
+  background: var(--accent);
   box-shadow: 0 0 14px var(--accent), 0 0 6px var(--accent-light);
 }
 
@@ -150,7 +150,7 @@
   padding: 10px 12px;
   background: rgba(var(--accent-strong-rgb), 0.12);
   border: 1px solid rgba(var(--accent-strong-rgb), 0.35);
-  border-radius: 12px;
+  border-radius: 6px;
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s;
 }
@@ -207,6 +207,39 @@
   transform: translateX(21px);
 }
 
+/* Seletor segmentado Pessoal/Profissional no cabeçalho mobile da página de
+   Perfil — mesmo estado que o .sidebar-mode-switch, estilo diferente
+   (pílula com o lado ativo a vermelho cheio, como no mockup). Escondido
+   por omissão; só visível em mobile (ver @media em App.css). */
+.profile-mode-switch-mobile {
+  display: none;
+  padding: 3px;
+  border-radius: 3px;
+  background: rgba(var(--surface-rgb), 0.6);
+  border: 1px solid var(--glass-border);
+  gap: 2px;
+}
+
+.profile-mode-switch-mobile button {
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  padding: 8px 16px;
+  border-radius: 3px;
+  min-height: 44px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.profile-mode-switch-mobile button.active {
+  background: var(--accent-strong);
+  color: white;
+  box-shadow: 0 0 14px rgba(var(--accent-strong-rgb), 0.55);
+}
+
 .sidebar-footer {
   display: flex;
   flex-direction: column;
@@ -225,7 +258,7 @@
   align-items: center;
   gap: 12px;
   padding: 8px;
-  border-radius: 12px;
+  border-radius: 6px;
   transition: background 0.15s ease;
 }
 
@@ -251,8 +284,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent-deep));
-  color: white;
+  background: var(--accent);
+  color: #0a0b0c;
   font-size: 1.1rem;
   font-weight: 700;
 }
@@ -264,85 +297,383 @@
   min-width: 0;
 }
 
-@media (max-width: 760px) {
+/* --- Barra de navegação fixa em baixo + gaveta da sidebar (mobile) --- */
+.bottom-nav {
+  display: none;
+}
+
+.mobile-top-bar {
+  display: none;
+}
+
+.sidebar-drawer-overlay {
+  display: none;
+}
+
+.sidebar-drawer-close {
+  display: none;
+}
+
+@media (max-width: 768px) {
   .app-layout {
     flex-direction: column;
   }
 
+  /* A Sidebar passa a gaveta off-canvas: fica fora do fluxo (fixed),
+     escondida à esquerda por omissão, e desliza para dentro quando
+     `.app-layout` tem a classe `drawer-open` (controlada pelo botão de
+     hambúrguer). Mantém o espaçamento/conteúdo iguais ao desktop — só
+     muda o posicionamento. */
   .sidebar {
-    width: auto;
-    height: auto;
-    position: static;
-    margin: 12px;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-
-  /* 1.ª linha: logótipo + utilizador; 2.ª linha: links a deslizar. */
-  .sidebar {
-    padding: 14px;
-    row-gap: 12px;
-  }
-
-  .sidebar-brand {
-    order: 1;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: min(270px, 82vw);
+    height: 100dvh;
     margin: 0;
+    border-radius: 0 16px 16px 0;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 300;
+    overflow-y: auto;
+    /* A gaveta cobre o conteúdo da página por cima (não ao lado, como no
+       desktop) — o fundo semitransparente com blur da .glass (ver
+       index.css) não chega para ler o texto em cima de cartões coloridos
+       nalguns browsers mobile (o backdrop-filter nem sempre é fiável).
+       Fundo sólido só aqui, mesma solução já usada nos modais. */
+    background: rgb(var(--surface-rgb));
   }
 
-  .sidebar-footer {
-    order: 2;
-    flex-direction: row;
+  .app-layout.drawer-open .sidebar {
+    transform: translateX(0);
+  }
+
+  .sidebar-drawer-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 3, 10, 0.6);
+    z-index: 250;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+
+  .app-layout.drawer-open .sidebar-drawer-overlay {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Sempre visível, sticky no topo do conteúdo (não "fixed" sobre a
+     página) — reserva o seu próprio espaço, por isso o resto da página
+     nunca precisa de um padding-top "adivinhado" para lhe escapar. */
+  .mobile-top-bar {
+    display: flex;
     align-items: center;
-    border-top: none;
-    padding-top: 0;
-    margin-left: auto;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 200;
+    padding: 10px 16px;
+    background: rgba(var(--surface-rgb), 0.95);
+    border-bottom: 1px solid var(--glass-border);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
 
-  .sidebar-user {
-    padding: 0;
+  .mobile-top-bar-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 4px;
+    color: var(--accent);
   }
 
-  .sidebar-user-name {
-    display: none;
+  .mobile-top-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
-  .sidebar-user-avatar {
-    width: 36px;
-    height: 36px;
+  .mobile-top-bar-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--accent);
+    color: #0a0b0c;
+    font-size: 0.9rem;
+    font-weight: 700;
+    flex-shrink: 0;
   }
 
-  .sidebar-logout {
-    padding: 8px 14px;
+  .mobile-top-bar-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
-  .sidebar-nav {
-    order: 3;
-    flex: 0 0 100%;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    margin: 0 -14px;
-    padding: 0 14px;
-    box-sizing: content-box;
+  .mobile-top-bar-hamburger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 4px;
+    background: transparent;
+    border: 1px solid rgba(var(--accent-strong-rgb), 0.5);
+    color: var(--text-primary);
   }
 
-  .sidebar-nav::-webkit-scrollbar {
-    display: none;
+  .sidebar-brand-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
 
-  .sidebar-link {
+  .sidebar-drawer-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 4px;
+    border: 1px solid var(--glass-border);
+    background: transparent;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+
+  .app-main {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100;
+    /* Força esta barra para a sua própria camada de composição — sem
+       isto, o Safari/Chrome mobile por vezes recalcula mal a posição de
+       elementos "fixed" durante o scroll (sobretudo quando a barra de
+       endereço do browser aparece/desaparece), fazendo-a "desaparecer"
+       momentaneamente ou ficar fora do ecrã visível. Correção conhecida
+       para esta classe de bug em iOS Safari. */
+    transform: translateZ(0);
+    background: rgba(var(--surface-rgb), 0.97);
+    border-top: 1px solid var(--glass-border);
+    padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
+    gap: 2px;
+  }
+
+  /* Grupos à volta do item "primary" (ver BottomNav.jsx) — largura igual
+     dos dois lados, para o botão central ficar sempre mesmo ao centro,
+     independentemente de quantos itens há de cada lado. */
+  .bottom-nav-group {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .bottom-nav-group-center {
+    flex: 0 0 auto;
+  }
+
+  .bottom-nav-link {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 44px;
+    padding: 4px 2px;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 0.66rem;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  /* O corte de texto fica só na legenda, não no link — senão corta também
+     o ícone do botão "Registar", que sobe acima da caixa do link. */
+  .bottom-nav-label {
+    max-width: 100%;
     white-space: nowrap;
-    padding: 9px 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .sidebar-link.active::before {
-    display: none;
+  .bottom-nav-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
-  .sidebar-divider {
-    display: none;
+  .bottom-nav-link.active {
+    color: var(--accent);
+  }
+
+  .bottom-nav-link.active .bottom-nav-icon {
+    filter: none;
+  }
+
+  /* O botão "Registar" fica em destaque — círculo vermelho elevado,
+     como na imagem de referência. */
+  .bottom-nav-link.primary .bottom-nav-icon {
+    width: 46px;
+    height: 46px;
+    margin-top: -16px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #0a0b0c;
+    box-shadow: 0 0 0 4px var(--bg-base);
+  }
+
+  .bottom-nav-link.primary.active .bottom-nav-icon {
+    filter: none;
+  }
+
+  /* --- Dashboard: 2 colunas (não 1) e os 7 dias mantêm-se numa só linha,
+     mais compactos, tal como a imagem de referência mobile. */
+  .stats-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Só um "Registar treino" no telemóvel (o do fundo da página) — o do
+     cabeçalho fica a mais, sem espaço. */
+  .dashboard-header-log-cta {
+    display: none !important;
+  }
+
+  .week-calendar {
+    grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+    gap: 3px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .week-day {
+    gap: 2px !important;
+    padding: 14px 2px !important;
+    border-radius: 4px !important;
+  }
+
+  .week-day-label {
+    font-size: 0.68rem !important;
+  }
+
+  .week-day-number {
+    font-size: 0.6rem !important;
+    white-space: normal !important;
+  }
+
+  /* Cartões de estatística mais compactos e unidos num só bloco (em vez de
+     4 cartões soltos) — menos espaço perdido em margens repetidas, mais
+     parecido com o protótipo de referência. O "cimento" entre células é o
+     fundo do contentor a aparecer pelo gap de 1px. */
+  .stats-row {
+    gap: 1px !important;
+    background: var(--glass-border) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: 4px !important;
+    overflow: hidden !important;
+    margin-bottom: 14px !important;
+  }
+
+  .stats-row .stat-tile {
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 10px 12px 12px !important;
+  }
+
+  /* Mesmo tratamento em Gestão/Perfil — senão os seus 4 cartões (Membros,
+     Ativos, etc.) ficam soltos no telemóvel enquanto o dashboard já tem o
+     bloco único. */
+  .profile-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 1px !important;
+    background: var(--glass-border) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: 4px !important;
+    overflow: hidden !important;
+    margin-bottom: 14px !important;
+  }
+
+  .profile-stats .stat-tile {
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 10px 12px 12px !important;
+  }
+
+  .stat-tile-header {
+    margin-bottom: 2px !important;
+  }
+
+  .stat-tile-label {
+    font-size: 0.72rem !important;
+  }
+
+  .stat-tile-value {
+    font-size: 1.3rem !important;
+  }
+
+  .stat-tile-unit {
+    font-size: 0.85rem !important;
+  }
+
+  .stat-tile-sub {
+    font-size: 0.7rem !important;
+  }
+
+  .stat-tile-icon {
+    width: 24px !important;
+    height: 24px !important;
+  }
+
+  /* O destaque pedia demasiado espaço vertical no telemóvel. */
+  .stat-tile-flame {
+    display: none !important;
+  }
+
+  /* No desktop fica fixo no canto (cartão largo, com espaço à volta); no
+     telemóvel o cartão é pequeno e centrado — posicionado em absoluto,
+     sobrepunha-se ao número do dia. Aqui volta ao fluxo normal, por baixo
+     do número. */
+  .week-day-today {
+    position: static !important;
+    display: block !important;
+    margin-top: 1px !important;
+    font-size: 0.5rem !important;
+    padding: 0px 4px !important;
+  }
+
+  /* --- Perfil: seletor Pessoal/Profissional no cabeçalho da página (reúsa
+     o estado do useSidebarMode — mesma fonte de verdade da Sidebar), mais
+     compacto que o toggle da Sidebar, à largura do conteúdo. --- */
+  .profile-mode-switch-mobile {
+    display: inline-flex;
+    margin-bottom: 16px;
+  }
+
+  /* --- Cabeçalho das páginas: título + botões de ação, a quebrar linha em
+     vez de empurrar para fora do ecrã (ex: Clientes, Horários da equipa). --- */
+  .page-header {
+    flex-wrap: wrap;
+    row-gap: 12px;
+    margin-bottom: 16px !important;
+  }
+
+  .page-header h1 {
+    font-size: 1.2rem;
   }
 }
 
@@ -373,7 +704,7 @@
   align-items: center;
   gap: 6px;
   padding: 14px 8px;
-  border-radius: 12px;
+  border-radius: 6px;
   border: 1px solid var(--glass-border);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-secondary);
@@ -401,7 +732,7 @@
   font-size: 0.6rem;
   font-weight: 700;
   padding: 2px 6px;
-  border-radius: 999px;
+  border-radius: 3px;
   background: rgba(251, 191, 36, 0.2);
   color: #fbbf24;
   border: 1px solid rgba(251, 191, 36, 0.4);
@@ -521,6 +852,50 @@
   text-align: center;
 }
 
+.google-signin-button {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+  /* O iframe que a Google desenha lá dentro tem fundo branco; sem isto,
+     esse branco "espreita" nos cantos arredondados do botão (forma
+     "pill") quando a largura calculada em JS não bate 100% certo com o
+     que ela desenha. */
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 4px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--glass-border);
+}
+
+.auth-step-email {
+  margin: 0 0 4px;
+  font-size: 0.85rem;
+}
+
+.auth-dev-link {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 4px;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  font-size: 0.78rem;
+  word-break: break-all;
+}
+
 .auth-switch a {
   color: var(--accent);
   font-weight: 600;
@@ -533,6 +908,12 @@
   width: 100%;
   margin: 0 auto;
   animation: fadeUp 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (max-width: 768px) {
+  .page-container {
+    padding-top: 20px;
+  }
 }
 
 .page-header {
@@ -561,63 +942,42 @@
   position: relative;
   font: inherit;
   color: inherit;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   transition: border-color 0.15s ease, transform 0.12s ease;
   display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 16px;
-  border-radius: 16px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 22px 16px;
+  border-radius: 6px;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   min-width: 0;
 }
 
 .week-day.selected {
-  background: linear-gradient(160deg, rgba(var(--accent-strong-rgb), 0.55), rgba(var(--accent-deep-rgb), 0.35));
+  background: color-mix(in srgb, var(--accent) 12%, var(--glass-bg));
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.6), 0 0 24px rgba(var(--accent-strong-rgb), 0.45);
-}
-
-.week-day-icon {
-  width: 46px;
-  height: 46px;
-  border-radius: 13px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(var(--accent-light-rgb), 0.55);
-}
-
-.week-day.attended .week-day-icon {
-  background: color-mix(in srgb, var(--day-accent) 22%, transparent);
-  border: 1px solid color-mix(in srgb, var(--day-accent) 45%, transparent);
-  color: var(--day-accent);
-  box-shadow: 0 0 14px color-mix(in srgb, var(--day-accent) 35%, transparent);
-}
-
-.week-day.selected .week-day-icon {
-  background: rgba(255, 255, 255, 0.14);
-  color: white;
+  box-shadow: none;
 }
 
 .week-day-text {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 2px;
   min-width: 0;
 }
 
 .week-day-label {
-  font-size: 1.1rem;
+  font-size: 0.92rem;
   font-weight: 700;
 }
 
 .week-day-number {
-  font-size: 0.88rem;
+  font-size: 0.76rem;
   color: var(--text-secondary);
   white-space: nowrap;
 }
@@ -636,8 +996,8 @@
 }
 
 .week-day.selected .week-day-check {
-  background: #f472b6;
-  box-shadow: 0 0 8px #f472b6;
+  background: var(--accent);
+  box-shadow: none;
 }
 
 .filter-bar {
@@ -679,9 +1039,7 @@
 
 .stat-tile:hover {
   z-index: 2;
-  transform: translateY(-3px);
-  box-shadow: var(--glass-shadow), 0 8px 32px rgba(var(--accent-deep-rgb), 0.25);
-  border-color: rgba(var(--accent-strong-rgb), 0.35);
+  border-color: var(--accent);
 }
 
 .stat-tile-header {
@@ -697,6 +1055,16 @@
   color: rgba(221, 226, 255, 0.85);
 }
 
+.profile-stat-clickable {
+  cursor: pointer;
+}
+
+.profile-stat-chevron {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
 .stat-tile-title {
   flex: 1;
   font-size: 0.95rem;
@@ -704,17 +1072,17 @@
 }
 
 .stat-tile-icon {
-  width: 46px;
-  height: 46px;
-  border-radius: 13px;
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: linear-gradient(145deg, rgba(var(--accent-strong-rgb), 0.45), rgba(var(--accent-deep-rgb), 0.25));
-  border: 1px solid rgba(var(--accent-rgb), 0.35);
-  color: #ddd6fe;
-  box-shadow: 0 0 18px rgba(var(--accent-strong-rgb), 0.3);
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  color: var(--accent);
+  box-shadow: none;
 }
 
 .stat-tile-delta {
@@ -722,7 +1090,7 @@
   align-items: center;
   gap: 3px;
   padding: 3px 8px;
-  border-radius: 999px;
+  border-radius: 3px;
   font-size: 0.76rem;
   font-weight: 700;
   white-space: nowrap;
@@ -756,13 +1124,10 @@
 
 .stat-tile-value {
   font-size: 2.3rem;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
-  letter-spacing: -0.03em;
-  background: linear-gradient(135deg, #ede9fe 0%, var(--accent-light) 70%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
 }
 
 .stat-tile-unit {
@@ -801,8 +1166,8 @@
 .progress-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent-deep), var(--accent));
-  box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.7);
+  background: var(--accent);
+  box-shadow: none;
 }
 
 .stat-tile.chart {
@@ -845,7 +1210,7 @@
   flex-direction: column;
   gap: 2px;
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgb(var(--surface-rgb));
   border: 1px solid rgba(var(--accent-rgb), 0.45);
   box-shadow: 0 8px 20px rgba(2, 4, 20, 0.6);
@@ -931,7 +1296,7 @@
 .workout-row-icon {
   width: 54px;
   height: 54px;
-  border-radius: 15px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -996,7 +1361,7 @@
   align-items: center;
   gap: 6px;
   padding: 9px 16px;
-  border-radius: 12px;
+  border-radius: 6px;
   border: 1px solid rgba(var(--accent-rgb), 0.28);
   background: rgba(var(--accent-strong-rgb), 0.12);
   font-size: 0.88rem;
@@ -1015,7 +1380,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-secondary);
@@ -1045,7 +1410,7 @@
 .exercise-icon-chip {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1057,7 +1422,7 @@
 .exercise-thumb {
   display: inline-flex;
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.06);
 }
@@ -1131,7 +1496,7 @@
 
 .muscle-filter-chip {
   padding: 7px 15px;
-  border-radius: 999px;
+  border-radius: 3px;
   border: 1px solid var(--glass-border);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-secondary);
@@ -1177,11 +1542,12 @@
 }
 
 .exercise-option-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
   padding: 0;
-  border-radius: 14px;
+  border-radius: 6px;
   border: 1px solid var(--glass-border);
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-primary);
@@ -1189,6 +1555,52 @@
   text-align: left;
   overflow: hidden;
   transition: transform 0.15s, border-color 0.15s;
+}
+
+/* Quando o cartão é um <div> (exercício pessoal, com botão de eliminar ao
+   lado — ver ExercisePicker.jsx), este botão interno é que escolhe o
+   exercício; nos outros cartões (sem eliminar) o próprio .exercise-option-card
+   já é o botão, por isso esta classe nem chega a existir no DOM. */
+.exercise-option-select {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.exercise-option-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(10, 8, 20, 0.6);
+  color: #fda4af;
+  backdrop-filter: blur(4px);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.exercise-option-delete:hover:not(:disabled) {
+  background: var(--danger);
+  color: white;
+}
+
+.exercise-option-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .exercise-option-card:hover {
@@ -1260,6 +1672,74 @@
   border-radius: 50%;
   background: var(--exercise-color);
   flex-shrink: 0;
+}
+
+/* Cartão "Criar exercício", à frente da grelha — tracejado, cor do tema em
+   vez da cor do grupo muscular (ainda não tem nenhum). */
+.exercise-option-create {
+  border-style: dashed;
+  border-color: rgba(var(--accent-strong-rgb), 0.45);
+}
+
+.exercise-option-create:hover {
+  border-color: var(--accent);
+  background: rgba(var(--accent-strong-rgb), 0.1);
+}
+
+.exercise-option-create .exercise-option-media {
+  background: rgba(var(--accent-strong-rgb), 0.12);
+  color: var(--accent);
+}
+
+/* Selo no canto da miniatura de um exercício pessoal (owner_id definido —
+   ver exerciseController.js), para se distinguir do catálogo do ginásio. */
+.exercise-option-custom-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  color: white;
+  background: rgba(var(--accent-strong-rgb), 0.85);
+  backdrop-filter: blur(4px);
+}
+
+/* --- Formulário de criar exercício pessoal (dentro do seletor) --- */
+.exercise-create-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.exercise-create-photo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 120px;
+  margin-bottom: 14px;
+  border-radius: 6px;
+  border: 1px dashed var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.exercise-create-photo:hover {
+  border-color: var(--accent);
+  background: rgba(var(--accent-strong-rgb), 0.08);
+}
+
+.exercise-create-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 @media (max-width: 640px) {
@@ -1374,7 +1854,7 @@
   font-size: 0.68rem;
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: 3px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid var(--glass-border);
   color: var(--text-secondary);
@@ -1392,6 +1872,8 @@
   gap: 8px;
 }
 
+/* Desktop: coluna compacta à direita do cabeçalho (ver @media para a
+   versão em mobile — fila de cartões por baixo, não cabe à direita). */
 .subscription-compact {
   display: flex;
   flex-direction: column;
@@ -1469,8 +1951,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent-deep));
-  color: white;
+  background: var(--accent);
+  color: #0a0b0c;
   font-weight: 700;
 }
 
@@ -1496,7 +1978,7 @@
   align-items: center;
   gap: 10px;
   padding: 10px;
-  border-radius: 12px;
+  border-radius: 6px;
   border: none;
   background: transparent;
   color: inherit;
@@ -1572,8 +2054,15 @@
 }
 
 .messages-thread-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 16px 20px;
   border-bottom: 1px solid var(--glass-border);
+}
+
+.messages-back {
+  display: none;
 }
 
 .messages-list {
@@ -1622,6 +2111,43 @@
 
 .messages-compose .glass-input {
   flex: 1;
+}
+
+@media (max-width: 768px) {
+  /* Como num chat de telemóvel: mostra só a lista OU só a conversa, nunca
+     os dois ao mesmo tempo lado a lado (é isso que ficava espremido). A
+     classe `.has-selection` (ver MessagesPage.jsx) diz qual dos dois. */
+  .messages-layout {
+    height: calc(100dvh - 230px - env(safe-area-inset-bottom));
+    min-height: 320px;
+  }
+
+  .messages-contacts {
+    width: 100%;
+  }
+
+  .messages-layout:not(.has-selection) .messages-thread {
+    display: none;
+  }
+
+  .messages-layout.has-selection .messages-contacts {
+    display: none;
+  }
+
+  .messages-back {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    margin: -6px 0 -6px -8px;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    transform: rotate(180deg);
+  }
 }
 
 .empty-state {
@@ -1676,7 +2202,7 @@
   right: 16px;
   font-size: 0.7rem;
   padding: 3px 9px;
-  border-radius: 999px;
+  border-radius: 3px;
   background: rgba(var(--accent-rgb), 0.2);
   border: 1px solid var(--glass-border);
   color: var(--accent);
@@ -1688,22 +2214,47 @@
   margin-top: 6px;
 }
 
+/* Perfil: em mobile, quem tem o toggle Pessoal/Profissional mostra esse
+   modo no selo em vez do nome da role (ver @media); no desktop o selo
+   mostra sempre a role, como sempre mostrou. */
+.profile-role-badge-mobile {
+  display: none;
+}
+
 .profile-summary {
   padding: 24px 28px;
 }
 
+/* Desktop: identidade à esquerda, subscrições ativas à direita — como
+   sempre foi. Em mobile (ver @media) passa a empilhado, com as
+   subscrições a virarem uma fila de cartões por baixo em vez de ficarem
+   à direita (não cabe). */
 .profile-summary-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
-  flex-wrap: wrap;
+}
+
+.profile-summary-email {
+  margin: 0 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-summary-identity {
   display: flex;
   align-items: center;
   gap: 18px;
+  min-width: 0;
+}
+
+/* Sem isto, o texto (nome/email) não encolhe dentro do flex e ultrapassa
+   o cartão em ecrãs estreitos — min-width:0 é o que permite ao filho do
+   flex encolher abaixo do tamanho do seu conteúdo. */
+.profile-summary-identity > div {
+  min-width: 0;
 }
 
 .profile-avatar {
@@ -1711,7 +2262,7 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent-deep));
+  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1722,7 +2273,7 @@
   padding: 0;
   cursor: pointer;
   overflow: hidden;
-  color: white;
+  color: #0a0b0c;
   font-family: inherit;
 }
 
@@ -1752,6 +2303,87 @@
 
 .profile-summary h3 {
   margin: 0 0 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-edit-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.profile-edit-trigger:hover {
+  color: var(--text-primary);
+  border-color: rgba(var(--accent-strong-rgb), 0.4);
+}
+
+@media (max-width: 768px) {
+  /* Em mobile não há espaço para a identidade e os blocos de seguidores
+     lado a lado no cabeçalho — a identidade fica em cima, os blocos
+     (sempre os dois lado a lado entre si, só mais estreitos) por baixo,
+     com uma linha a separar. */
+  .profile-summary-top {
+    flex-direction: column;
+    /* Sem isto, herda "align-items: flex-start" do desktop — em coluna,
+       isso faz a identidade encolher à volta do conteúdo em vez de
+       esticar à largura do cartão, e sem uma largura real para encolher
+       contra, o texto do email nunca chegava a cortar (mesmo com
+       min-width:0/text-overflow corretos mais abaixo na cadeia). */
+    align-items: stretch;
+  }
+
+  .profile-follow-stats {
+    width: 100%;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--glass-border);
+  }
+
+  .profile-follow-stat {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 12px;
+  }
+
+  .profile-follow-stat .stat-tile-label {
+    font-size: 0.78rem;
+  }
+
+  .profile-follow-stat-body .stat-tile-value {
+    font-size: 1.4rem;
+  }
+
+  /* Subscrições: de 3 colunas para empilhadas (ver ponto de atenção 2). */
+  .subscription-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .subscription-compact {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding-top: 16px;
+    border-top: 1px solid var(--glass-border);
+  }
+
+  .subscription-compact-row {
+    align-items: flex-start;
+    gap: 2px;
+    padding: 8px 14px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.04);
+  }
 }
 
 .feature-card {
@@ -1833,7 +2465,7 @@
   transform: translate(-50%, -100%) translateY(-10px);
   background: rgba(var(--surface-rgb), 0.95);
   border: 1px solid var(--glass-border);
-  border-radius: 10px;
+  border-radius: 4px;
   padding: 6px 10px;
   display: flex;
   flex-direction: column;
@@ -2015,7 +2647,7 @@
 .member-tile-role {
   align-self: flex-start;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: 3px;
   font-size: 0.76rem;
   font-weight: 700;
   color: var(--role-color);
@@ -2100,9 +2732,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent-deep));
-  color: white;
-  box-shadow: 0 0 10px rgba(var(--accent-strong-rgb), 0.3);
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  color: var(--accent);
+  box-shadow: none;
 }
 
 .log-card {
@@ -2136,9 +2769,7 @@
   align-items: center;
   gap: 24px;
   border-color: rgba(var(--accent-rgb), 0.4);
-  background:
-    radial-gradient(ellipse at 0% 50%, rgba(var(--accent-strong-rgb), 0.28), transparent 55%),
-    var(--glass-bg-strong);
+  background: var(--glass-bg-strong);
 }
 
 .log-start-icon {
@@ -2149,14 +2780,15 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: radial-gradient(circle at 35% 30%, var(--accent-strong), var(--accent-deep));
-  color: white;
-  box-shadow: 0 0 26px rgba(var(--accent-strong-rgb), 0.6);
+  background: transparent;
+  border: 1px solid rgba(var(--accent-rgb), 0.4);
+  color: var(--accent);
+  box-shadow: none;
 }
 
 .log-start.running .log-start-icon {
-  background: radial-gradient(circle at 35% 30%, #34d399, #065f46);
-  box-shadow: 0 0 26px rgba(52, 211, 153, 0.55);
+  border-color: rgba(52, 211, 153, 0.5);
+  color: #34d399;
 }
 
 .log-start-text {
@@ -2195,8 +2827,8 @@
   justify-content: center;
   gap: 10px;
   white-space: nowrap;
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent-deep));
-  box-shadow: 0 0 22px rgba(var(--accent-strong-rgb), 0.45);
+  background: var(--accent);
+  box-shadow: none;
 }
 
 .log-start-button {
@@ -2326,7 +2958,7 @@
 
 .log-exercise {
   border: 1px solid var(--glass-border);
-  border-radius: 14px;
+  border-radius: 6px;
   background: rgba(var(--surface-rgb), 0.3);
   padding: 16px 18px;
 }
@@ -2385,7 +3017,7 @@
 .log-exercise-set-remove {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-secondary);
@@ -2411,18 +3043,19 @@
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(var(--accent-rgb), 0.35);
-  background: rgba(var(--accent-strong-rgb), 0.1);
-  color: #ddd6fe;
+  border-radius: 4px;
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-primary);
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .log-add-set-inline:hover {
-  background: rgba(var(--accent-strong-rgb), 0.22);
+  background: rgba(var(--accent-rgb), 0.08);
+  border-color: var(--accent);
 }
 
 .log-set-number {
@@ -2434,8 +3067,10 @@
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  background: radial-gradient(circle at 35% 30%, var(--accent-strong), var(--accent-deep));
-  box-shadow: 0 0 12px rgba(var(--accent-strong-rgb), 0.55);
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  color: var(--accent);
+  box-shadow: none;
 }
 
 .log-set-delete {
@@ -2444,7 +3079,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(244, 63, 94, 0.45);
   background: rgba(244, 63, 94, 0.1);
   color: #fb7185;
@@ -2469,10 +3104,10 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  border-radius: 12px;
-  border: 1.5px dashed rgba(var(--accent-rgb), 0.5);
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
   background: transparent;
-  color: #ddd6fe;
+  color: var(--text-primary);
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
@@ -2480,7 +3115,7 @@
 }
 
 .log-add-set:hover {
-  background: rgba(var(--accent-strong-rgb), 0.12);
+  background: rgba(var(--accent-rgb), 0.08);
   border-color: var(--accent);
 }
 
@@ -2587,7 +3222,7 @@
   width: 46px;
   height: 46px;
   padding: 0;
-  border-radius: 12px;
+  border-radius: 6px;
   border: 1.5px dashed rgba(var(--accent-rgb), 0.45);
   background: rgba(var(--accent-strong-rgb), 0.08);
   color: var(--accent-light);
@@ -2639,7 +3274,7 @@
   transform: translateY(-50%);
   width: 34px;
   height: 34px;
-  border-radius: 9px;
+  border-radius: 4px;
   border: 1px solid rgba(var(--accent-rgb), 0.35);
   background: rgba(var(--accent-strong-rgb), 0.18);
   color: #ddd6fe;
@@ -2732,7 +3367,7 @@
   align-items: center;
   gap: 14px;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: 6px;
   border: 1px solid var(--glass-border);
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-primary);
@@ -2749,7 +3384,7 @@
 .food-result-image {
   width: 56px;
   height: 56px;
-  border-radius: 10px;
+  border-radius: 4px;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -2789,7 +3424,7 @@
 
 .food-result-store {
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: 3px;
   font-size: 0.72rem;
   font-weight: 600;
   color: #6ee7b7;
@@ -2893,8 +3528,17 @@
   gap: 14px;
   padding: 16px;
   border: 1px solid var(--glass-border);
-  border-radius: 16px;
+  border-radius: 8px;
   background: rgba(var(--surface-rgb), 0.3);
+}
+
+/* Os exercícios dentro de um dia usam a mesma cor de fundo que o cartão do
+   dia (.log-exercise é partilhado com o registo de treino, onde não está
+   aninhado) — sem contraste entre os dois níveis, o dia inteiro parecia um
+   bloco só, achatado. Mais claro aqui para se destacar como cartão dentro
+   do cartão. */
+.nf-meal .log-exercise {
+  background: rgba(var(--surface-strong-rgb), 0.6);
 }
 
 .nf-meal-header {
@@ -2914,7 +3558,7 @@
   color: var(--meal-color);
   background: color-mix(in srgb, var(--meal-color) 18%, transparent);
   border: 1px solid color-mix(in srgb, var(--meal-color) 45%, transparent);
-  box-shadow: 0 0 14px color-mix(in srgb, var(--meal-color) 30%, transparent);
+  box-shadow: none;
 }
 
 .nf-meal-name {
@@ -2944,7 +3588,7 @@
   gap: 8px;
   padding: 8px 10px;
   border: none;
-  border-radius: 10px;
+  border-radius: 4px;
   background: transparent;
   color: rgba(221, 226, 255, 0.75);
   font-size: 0.88rem;
@@ -2974,7 +3618,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(244, 63, 94, 0.4);
   background: rgba(244, 63, 94, 0.08);
   color: #fb7185;
@@ -2999,7 +3643,7 @@
   min-width: 0;
   padding: 14px;
   border: 1px solid rgba(var(--accent-rgb), 0.2);
-  border-radius: 14px;
+  border-radius: 6px;
   background: rgba(var(--surface-rgb), 0.5);
 }
 
@@ -3019,7 +3663,7 @@
 .nf-option-pill {
   align-self: flex-start;
   padding: 5px 12px;
-  border-radius: 999px;
+  border-radius: 3px;
   font-size: 0.82rem;
   font-weight: 700;
   color: #ede9fe;
@@ -3090,9 +3734,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
-  background: radial-gradient(circle at 35% 30%, #34d399, #047857);
-  box-shadow: 0 0 20px rgba(52, 211, 153, 0.45);
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  box-shadow: none;
 }
 
 .nplan-title {
@@ -3119,7 +3764,7 @@
 
 .nplan-stats span {
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: 3px;
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--accent-light);
@@ -3138,7 +3783,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(var(--accent-rgb), 0.3);
   background: rgba(var(--accent-strong-rgb), 0.12);
   color: var(--text-primary);
@@ -3173,7 +3818,7 @@
   flex-direction: column;
   gap: 12px;
   padding: 16px;
-  border-radius: 14px;
+  border-radius: 6px;
   border: 1px solid var(--glass-border);
   border-top: 3px solid var(--meal-color);
   background: rgba(var(--surface-rgb), 0.3);
@@ -3244,7 +3889,7 @@
   width: 42px;
   height: 42px;
   flex-shrink: 0;
-  border-radius: 10px;
+  border-radius: 4px;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -3277,11 +3922,24 @@
   color: var(--text-secondary);
 }
 
+/* Técnica planeada (drop set, rest-pause...), só quando não é "normal" —
+   ver PlanDayEditor/WorkoutExerciseBlock para o mesmo padrão de cor. */
+.plan-exercise-type-badge {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--type-color);
+  color: var(--type-color);
+  font-size: 0.68rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
 .nplan-food-quantity {
   flex-shrink: 0;
   max-width: 40%;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: 3px;
   font-size: 0.78rem;
   font-weight: 600;
   color: #ddd6fe;
@@ -3345,26 +4003,37 @@
 .plan-form-exercises {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 14px;
 }
 
-.plan-form-head,
-.plan-form-row {
+/* Uma linha por série (reps/carga podem variar entre séries, ex: pirâmide)
+   — mesmo padrão do registo de treino (.log-exercise-sets), só sem o botão
+   de marcar feita (isso é só ao registar, não ao planear). */
+.plan-exercise-sets {
+  margin: 12px 0 0 54px;
+}
+
+.plan-exercise-sets-head,
+.plan-exercise-set {
   display: grid;
-  grid-template-columns: 40px minmax(0, 2.4fr) repeat(3, minmax(0, 1fr)) 40px;
+  grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr) 36px;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
-.plan-form-head {
-  padding: 0 0 4px;
+.plan-exercise-sets-head {
+  padding: 0 0 8px;
   font-size: 0.82rem;
   font-weight: 700;
   color: var(--text-secondary);
 }
 
-.plan-form-head span:first-child {
+.plan-exercise-sets-head span:first-child {
   text-align: center;
+}
+
+.plan-exercise-set + .plan-exercise-set {
+  margin-top: 8px;
 }
 
 .plan-form .glass-input.input-invalid {
@@ -3384,8 +4053,10 @@
 }
 
 .nplan-icon.plan-icon {
-  background: radial-gradient(circle at 35% 30%, var(--accent), var(--accent-deep));
-  box-shadow: 0 0 20px rgba(var(--accent-strong-rgb), 0.5);
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.4);
+  box-shadow: none;
 }
 
 .plan-exercise-image {
@@ -3415,18 +4086,13 @@
 }
 
 @media (max-width: 640px) {
-  .plan-form-head {
-    display: none;
+  .plan-exercise-sets {
+    margin-left: 0;
   }
-  .plan-form-row {
-    grid-template-columns: 34px repeat(3, minmax(0, 1fr)) 40px;
+  .plan-exercise-sets-head,
+  .plan-exercise-set {
+    grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) 30px;
     gap: 8px;
-  }
-  .plan-form-row .exercise-picker-trigger {
-    grid-column: 2 / -1;
-  }
-  .plan-form-row > input:first-of-type {
-    grid-column: 2;
   }
 }
 
@@ -3452,10 +4118,10 @@
   gap: 8px;
   padding: 7px 14px;
   border: none;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent-deep));
-  box-shadow: 0 0 14px rgba(var(--accent-strong-rgb), 0.45);
-  color: white;
+  border-radius: 4px;
+  background: var(--accent);
+  box-shadow: none;
+  color: #0a0b0c;
   font-size: 0.85rem;
   font-weight: 700;
   cursor: pointer;
@@ -3561,7 +4227,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 9px;
+  border-radius: 4px;
   border: 1.5px solid rgba(52, 211, 153, 0.45);
   background: transparent;
   color: rgba(110, 231, 183, 0.75);
@@ -3588,7 +4254,7 @@
 
 /* Série marcada como feita: verde e bloqueada */
 .log-exercise-set.done {
-  border-radius: 12px;
+  border-radius: 6px;
   background: rgba(16, 185, 129, 0.1);
   box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.35);
 }
@@ -3621,10 +4287,10 @@
   gap: 16px;
   max-width: min(520px, calc(100vw - 32px));
   padding: 16px 22px 16px 16px;
-  border-radius: 18px;
+  border-radius: 8px;
   border: 1px solid rgba(251, 191, 36, 0.6);
-  background: linear-gradient(135deg, #3b2a06, #1e1b4b 70%);
-  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.2), 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 40px rgba(251, 191, 36, 0.3);
+  background: #15130a;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   color: var(--text-primary);
   cursor: pointer;
   animation: achievement-in 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both;
@@ -3638,9 +4304,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 35% 30%, #fde68a, #d97706);
-  color: #451a03;
-  box-shadow: 0 0 22px rgba(251, 191, 36, 0.7);
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  color: #fbbf24;
+  box-shadow: none;
 }
 
 .achievement-toast-text {
@@ -3701,7 +4368,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid var(--glass-border);
   background: var(--glass-bg);
   color: var(--accent-light);
@@ -3742,17 +4409,17 @@
   top: 8px;
   right: 8px;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: 3px;
   font-size: 0.66rem;
   font-weight: 700;
   vertical-align: middle;
-  color: #fbcfe8;
-  background: rgba(236, 72, 153, 0.28);
+  color: #0a0b0c;
+  background: var(--accent);
 }
 
 /* Hoje, sem estar escolhido: contorno subtil. */
 .week-day.today:not(.selected) {
-  border-color: rgba(236, 72, 153, 0.45);
+  border-color: rgba(var(--accent-rgb), 0.45);
 }
 
 .day-header {
@@ -3777,7 +4444,7 @@
 
 .day-header-today {
   padding: 2px 10px;
-  border-radius: 999px;
+  border-radius: 3px;
   font-size: 0.75rem;
   font-weight: 700;
   color: #fbcfe8;
@@ -3799,7 +4466,7 @@
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: 6px;
   border: 1px solid rgba(var(--accent-rgb), 0.22);
   background: rgba(var(--surface-rgb), 0.55);
   color: var(--text-primary);
@@ -3865,7 +4532,7 @@
   z-index: 300;
   max-width: calc(100vw - 16px);
   padding: 6px;
-  border-radius: 14px;
+  border-radius: 6px;
   border: 1px solid rgba(var(--accent-rgb), 0.35);
   background: rgb(var(--surface-rgb));
   box-shadow: 0 18px 40px rgba(2, 4, 20, 0.65), 0 0 0 1px rgba(var(--accent-strong-rgb), 0.12);
@@ -3901,7 +4568,7 @@
   max-width: 380px;
   padding: 9px 12px;
   border: none;
-  border-radius: 10px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text-primary);
   font: inherit;
@@ -3968,7 +4635,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 9px;
+  border-radius: 4px;
   border: 1px solid var(--glass-border);
   background: rgba(255, 255, 255, 0.04);
   color: var(--accent-light);
@@ -4005,7 +4672,7 @@
 .ui-calendar-day {
   height: 34px;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text-primary);
   font: inherit;
@@ -4023,11 +4690,11 @@
 }
 
 .ui-calendar-day.selected {
-  border-color: transparent;
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent-deep));
-  color: white;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #0a0b0c;
   font-weight: 700;
-  box-shadow: 0 0 12px rgba(var(--accent-strong-rgb), 0.55);
+  box-shadow: none;
 }
 
 .ui-calendar-day:disabled {
@@ -4045,7 +4712,7 @@
 
 .ui-calendar-today {
   padding: 6px 14px;
-  border-radius: 9px;
+  border-radius: 4px;
   border: 1px solid rgba(var(--accent-rgb), 0.35);
   background: rgba(var(--accent-strong-rgb), 0.14);
   color: #ede9fe;
@@ -4159,6 +4826,32 @@
   stroke-width: 1;
 }
 
+/* Segunda série (comparação com um amigo): sempre tracejada, por cima da
+   série principal — ver ProgressChart.jsx (prop points2/color2). */
+.pc-line2 {
+  fill: none;
+  stroke: var(--series2);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.pc-dot2 {
+  fill: var(--series2);
+  stroke: rgb(var(--surface-rgb));
+  stroke-width: 2;
+  transition: r 0.12s ease;
+}
+
+.pc-tooltip-key-dashed {
+  width: 12px;
+  height: 0;
+  border-radius: 0;
+  border-top: 2px dashed currentColor;
+  background: none;
+}
+
 .pc-tooltip {
   --tx: -50%;
   position: absolute;
@@ -4167,7 +4860,7 @@
   flex-direction: column;
   gap: 2px;
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(var(--accent-rgb), 0.35);
   background: rgb(var(--surface-rgb));
   box-shadow: 0 8px 20px rgba(2, 4, 20, 0.6);
@@ -4247,7 +4940,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: 6px;
   border: 1px solid var(--glass-border);
   background: rgba(var(--surface-rgb), 0.3);
 }
@@ -4256,7 +4949,7 @@
   width: 46px;
   height: 46px;
   flex-shrink: 0;
-  border-radius: 10px;
+  border-radius: 4px;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -4312,6 +5005,79 @@
   }
 }
 
+@media (max-width: 768px) {
+  .profile-role-badge-desktop {
+    display: none;
+  }
+
+  .profile-role-badge-mobile {
+    display: inline-block;
+  }
+
+  .profile-summary {
+    padding: 18px;
+  }
+
+  /* --- Gráficos: lado a lado, como na dashboard, em vez de empilhados a
+     largura total — mais pequenos, mas os dois ficam visíveis juntos. --- */
+  .profile-charts {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px;
+  }
+
+  .profile-chart-card {
+    padding: 12px 10px 8px;
+  }
+
+  .profile-chart-card h3 {
+    font-size: 0.78rem;
+  }
+
+  .profile-chart-card > .text-secondary {
+    font-size: 0.66rem;
+    margin: 0 0 6px;
+  }
+
+  /* --- Composição corporal: 2 colunas em vez de 1 por linha. --- */
+  .preview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .preview-card {
+    padding: 14px;
+  }
+
+  .preview-card h3 {
+    font-size: 0.86rem;
+  }
+
+  .preview-caption {
+    font-size: 0.72rem;
+  }
+
+  /* --- Recordes pessoais: uma linha horizontal com scroll próprio, em vez
+     de empilhados — a página em si não ganha scroll horizontal. --- */
+  .profile-records-list {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    gap: 10px;
+    margin: 0 -20px 8px;
+    padding: 0 20px 4px;
+    scrollbar-width: none;
+  }
+
+  .profile-records-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .profile-record {
+    flex: 0 0 200px;
+    scroll-snap-align: start;
+  }
+}
+
 @media (max-width: 640px) {
   /* Duas colunas compactas: os 4 resumos não empurram os gráficos para longe. */
   .profile-stats {
@@ -4354,7 +5120,7 @@
   gap: 6px;
   margin-bottom: 8px;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: 3px;
   font-size: 0.8rem;
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--role-color, var(--accent)) 12%, transparent);
@@ -4376,7 +5142,13 @@
 /* --- Horário semanal (WeekTimetable) --- */
 
 .schedule-card {
-  padding: 18px 18px 14px;
+  padding: 14px 14px 10px;
+}
+
+/* Quando a grelha não cabe (ecrãs estreitos), desliza horizontalmente
+   dentro do cartão em vez de trocar de vista — ver WeekTimetable.jsx. */
+.tt-grid-wrap {
+  overflow-x: auto;
 }
 
 .tt-grid {
@@ -4416,8 +5188,8 @@
   height: 6px;
   margin: -2px 0 0 6px;
   border-radius: 50%;
-  background: #f472b6;
-  box-shadow: 0 0 8px #f472b6;
+  background: var(--accent);
+  box-shadow: none;
 }
 
 .tt-hours {
@@ -4443,7 +5215,7 @@
 }
 
 .tt-day.today {
-  background: linear-gradient(180deg, rgba(244, 114, 182, 0.07), rgba(244, 114, 182, 0.02));
+  background: rgba(var(--accent-rgb), 0.05);
 }
 
 .tt-slot {
@@ -4471,7 +5243,7 @@
   padding: 7px 9px 7px 11px;
   overflow: hidden;
   border: none;
-  border-radius: 10px;
+  border-radius: 4px;
   background:
     linear-gradient(90deg, var(--item-color) 0 3px, transparent 3px),
     color-mix(in srgb, var(--item-color) 32%, rgb(var(--surface-rgb)));
@@ -4516,7 +5288,7 @@ button.tt-item:hover {
   transform: translate(-50%, calc(-100% - 8px));
   background: rgb(var(--surface-rgb));
   border: 1px solid rgba(var(--accent-rgb), 0.35);
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 6px 10px;
   font-size: 0.78rem;
   font-weight: 600;
@@ -4551,7 +5323,7 @@ button.tt-item:hover {
   align-self: flex-start;
   margin-top: auto;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: 3px;
   font-size: 0.64rem;
   font-weight: 700;
   white-space: nowrap;
@@ -4578,40 +5350,33 @@ button.tt-item:hover {
   display: none;
 }
 
-.tt-list {
-  display: none;
-}
-
 .tt-empty {
   margin: 14px 0 0;
   text-align: center;
 }
 
-.week-day-today.static {
-  position: static;
-  margin-left: 8px;
-}
-
-@media (max-width: 900px) {
+@media (max-width: 768px) {
+  /* A grelha mantém-se (ver .tt-grid-wrap) — só as colunas ficam com uma
+     largura mínima para continuarem legíveis, deslizando o que não couber. */
   .tt-grid {
-    display: none;
+    grid-template-columns: 38px repeat(7, minmax(100px, 1fr));
+    min-width: max-content;
   }
-  .tt-list {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
+
+  .tt-day-head {
+    font-size: 0.7rem;
+    padding-bottom: 8px;
   }
-  .tt-list-day h4 {
-    margin: 0 0 8px;
-    font-size: 0.95rem;
+
+  .tt-hour {
+    font-size: 0.6rem;
+    padding-right: 6px;
   }
-  .tt-list-day p {
-    margin: 0;
-  }
-  .tt-list-day .tt-item {
-    position: static;
-    width: 100%;
-    margin-bottom: 6px;
+
+  .tt-item-time,
+  .tt-item-title,
+  .tt-item-subtitle {
+    font-size: 0.6rem;
   }
 }
 
@@ -4678,15 +5443,16 @@ button.tt-item:hover {
 .tt-item.dense {
   gap: 0;
   padding: 4px 6px 4px 9px;
-  border-radius: 7px;
+  border-radius: 4px;
   box-shadow: none;
 }
 
 .tt-item.dense .tt-item-title {
   font-size: 0.74rem;
+  line-height: 1.15;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
+  white-space: normal;
 }
 
 .tt-item.dense .tt-item-subtitle {
@@ -4703,6 +5469,7 @@ button.tt-item:hover {
 
 .tt-item.dense.narrow .tt-item-title {
   writing-mode: vertical-rl;
+  white-space: nowrap;
   font-size: 0.78rem;
   letter-spacing: 0.02em;
   max-height: 100%;
@@ -4736,17 +5503,6 @@ button.tt-item:hover {
   color: rgba(221, 226, 255, 0.45);
 }
 
-@media (max-width: 900px) {
-  .tt-list-chips {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-  }
-  .tt-list-chips .tt-item {
-    margin-bottom: 0;
-  }
-}
-
 /* Responsável da aula sempre visível no horário das aulas de grupo */
 .tt-item-subtitle.who {
   font-weight: 600;
@@ -4766,7 +5522,7 @@ button.tt-item:hover {
 .team-remove {
   flex-shrink: 0;
   padding: 5px 10px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(244, 63, 94, 0.35);
   background: transparent;
   color: #fda4af;
@@ -4823,7 +5579,7 @@ button.tt-item:hover {
   margin-bottom: 14px;
   padding: 14px 18px;
   border-color: rgba(251, 191, 36, 0.45);
-  background: linear-gradient(90deg, rgba(251, 191, 36, 0.14), transparent 60%), var(--glass-bg-strong);
+  background: var(--glass-bg-strong);
 }
 
 .schedule-alert strong {
@@ -4843,7 +5599,7 @@ button.tt-item:hover {
 
 .schedule-stats {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .schedule-form {
@@ -4910,7 +5666,7 @@ button.tt-item:hover {
 .client-source-badge {
   font-size: 0.7rem;
   padding: 2px 7px;
-  border-radius: 20px;
+  border-radius: 8px;
 }
 .client-source-gym {
   background: color-mix(in srgb, #3b82f6 15%, transparent);
@@ -4927,7 +5683,7 @@ button.tt-item:hover {
   gap: 10px;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 8px 14px;
   margin-top: 8px;
 }
@@ -4969,7 +5725,7 @@ button.tt-item:hover {
 .class-detail-kind {
   align-self: flex-start;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: 3px;
   font-size: 0.76rem;
   font-weight: 700;
   background: color-mix(in srgb, var(--item-color) 25%, transparent);
@@ -4997,7 +5753,7 @@ button.tt-item:hover {
 .class-detail-alert {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   color: #fde68a;
   background: rgba(251, 191, 36, 0.12);
   border: 1px solid rgba(251, 191, 36, 0.4);
@@ -5021,7 +5777,7 @@ button.tt-item:hover {
   flex-direction: column;
   gap: 1px;
   padding: 8px 14px;
-  border-radius: 12px;
+  border-radius: 6px;
   border: 1px solid var(--glass-border);
   background: var(--glass-bg);
   color: var(--text-primary);
@@ -5040,6 +5796,32 @@ button.tt-item:hover {
   border-color: var(--accent);
   background: rgba(var(--accent-strong-rgb), 0.25);
   box-shadow: 0 0 14px rgba(var(--accent-strong-rgb), 0.35);
+}
+
+@media (max-width: 768px) {
+  /* Chips da equipa lado a lado (2 por linha) em vez de 1 por linha a
+     ocupar o ecrã todo. */
+  .team-chips {
+    gap: 6px;
+  }
+
+  .team-chip {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 0;
+    padding: 7px 10px;
+    font-size: 0.8rem;
+  }
+
+  .team-chip strong,
+  .team-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .team-chip span {
+    font-size: 0.68rem;
+  }
 }
 
 /* --- Painel de gestão (ManagementPage) --- */
@@ -5140,7 +5922,7 @@ button.tt-item:hover {
   justify-content: space-between;
   gap: 10px;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(var(--surface-rgb), 0.3);
   font-size: 0.88rem;
 }
@@ -5156,7 +5938,7 @@ button.tt-item:hover {
   align-items: center;
   gap: 10px;
   padding: 6px 8px;
-  border-radius: 10px;
+  border-radius: 4px;
   font-size: 0.9rem;
 }
 
@@ -5189,7 +5971,7 @@ button.tt-item:hover {
 
 @media (max-width: 640px) {
   .schedule-stats {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .schedule-form-grid {
     grid-template-columns: 1fr;
@@ -5266,7 +6048,7 @@ button.tt-item:hover {
   justify-content: space-between;
   gap: 10px;
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: 4px;
   background: rgba(var(--surface-rgb), 0.35);
   font-size: 0.88rem;
 }
@@ -5311,7 +6093,7 @@ button.tt-item.busy:hover {
 .client-session-chip,
 .client-session-add {
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: 3px;
   border: 1px solid rgba(var(--accent-rgb), 0.45);
   background: rgba(var(--accent-rgb), 0.16);
   color: var(--accent-light);
@@ -5335,6 +6117,67 @@ button.tt-item.busy:hover {
 
 .client-no-session {
   font-size: 0.8rem;
+}
+
+@media (max-width: 768px) {
+  /* --- Clientes / Membros / Equipa: 2 colunas lado a lado, cartões mais
+     pequenos, em vez de 1 por linha ocupando o ecrã todo. --- */
+  .member-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .member-tile {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .member-tile-header {
+    gap: 8px;
+  }
+
+  .member-tile .member-card-avatar {
+    width: 38px;
+    height: 38px;
+    font-size: 0.95rem;
+  }
+
+  .member-tile-name {
+    font-size: 0.9rem;
+  }
+
+  .member-tile-email {
+    font-size: 0.72rem;
+  }
+
+  .member-tile-role {
+    font-size: 0.68rem;
+    padding: 2px 8px;
+  }
+
+  .member-tile-stats {
+    gap: 5px;
+    padding-top: 10px;
+  }
+
+  .member-tile-stat {
+    font-size: 0.74rem;
+  }
+
+  .client-source-badge {
+    font-size: 0.62rem;
+    padding: 1px 6px;
+  }
+
+  .client-session-chip,
+  .client-session-add {
+    font-size: 0.68rem;
+    padding: 3px 8px;
+  }
+
+  .client-no-session {
+    font-size: 0.7rem;
+  }
 }
 
 .clients-schedule-head {
@@ -5410,7 +6253,7 @@ button.tt-item.busy:hover {
   align-items: center;
   gap: 10px;
   padding: 7px 10px;
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(var(--surface-rgb), 0.4);
 }
 
@@ -5453,7 +6296,7 @@ button.tt-item.busy:hover {
 
 .generate-fn {
   padding: 4px 9px;
-  border-radius: 999px;
+  border-radius: 3px;
   border: 1px solid rgba(var(--accent-rgb), 0.25);
   background: transparent;
   color: var(--text-secondary);
@@ -5542,7 +6385,7 @@ button.tt-item.busy:hover {
   flex-direction: column;
   gap: 2px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(var(--surface-rgb), 0.4);
   font-size: 0.82rem;
 }
@@ -5573,11 +6416,402 @@ button.tt-item.busy:hover {
 
 .class-enrolled li {
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: 3px;
   font-size: 0.82rem;
   background: rgba(var(--accent-strong-rgb), 0.18);
 }
 
 .class-enrolled p {
   margin: 4px 0 0;
+}
+
+/* --- Amigos (seguir, comparar, convite) --- */
+
+.friends-link-card,
+.friends-add-card {
+  padding: 22px 24px;
+  margin-bottom: 16px;
+}
+
+.friends-link-card h3,
+.friends-add-card h3 {
+  margin: 0 0 14px;
+}
+
+.friends-add-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.friends-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.friends-link-row .glass-button,
+.friends-link-row .glass-button-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.friends-add-form {
+  display: flex;
+  gap: 10px;
+}
+
+.friends-add-form .glass-input {
+  flex: 1;
+}
+
+.friends-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.friends-tab {
+  padding: 8px 16px;
+  border-radius: 3px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+
+.friends-tab.active {
+  border-color: var(--accent);
+  background: rgba(var(--accent-strong-rgb), 0.25);
+  color: var(--text-primary);
+}
+
+.friends-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.friend-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 6px;
+}
+
+.friend-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.friend-row-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.friend-row-identity > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.friend-row-name {
+  font-weight: 600;
+  font-size: 0.92rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend-row-role {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.friends-follow-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  padding: 6px 12px;
+}
+
+/* Pré-visualização do convite (InvitePage) */
+.invite-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.invite-preview .member-card-avatar {
+  width: 72px;
+  height: 72px;
+  font-size: 1.6rem;
+}
+
+/* Cabeçalho da página de comparação */
+.friend-compare-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.friend-compare-header .member-card-avatar {
+  width: 52px;
+  height: 52px;
+  font-size: 1.2rem;
+}
+
+.friend-unfollow-btn {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.compare-period-picker {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.friend-compare-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px 22px;
+  margin-bottom: 16px;
+}
+
+.compare-legend {
+  display: flex;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.compare-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.compare-legend-item::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.compare-legend-item.mine::before {
+  background: var(--accent);
+}
+
+.compare-legend-item.theirs::before {
+  background: #64748b;
+}
+
+.compare-legend-item.dashed::before {
+  width: 14px;
+  height: 0;
+  border-radius: 0;
+  border-top: 2px dashed #94a3b8;
+  background: none;
+}
+
+.compare-row-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.compare-row-values {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.compare-value.mine {
+  color: var(--accent-light);
+}
+
+.compare-value.theirs {
+  color: #94a3b8;
+}
+
+.compare-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.compare-bar-mine {
+  background: var(--accent);
+}
+
+.compare-bar-theirs {
+  background: #64748b;
+}
+
+/* Blocos "Seguidores" / "A seguir" do perfil — ver FriendStatBlock em
+   ProfilePage.jsx. Reaproveita .stat-tile-icon/-label/-value (mesmo visual
+   dos cartões de progresso) para não duplicar estilo. */
+.profile-follow-stats {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.profile-follow-stat {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+  background: rgba(var(--surface-rgb), 0.3);
+  text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+/* min-width só no desktop — esta regra vem DEPOIS da versão mobile em
+   @media (max-width: 768px) mais acima no ficheiro, e por ordem de cascata
+   (mesma especificidade) ganharia sempre, mesmo em ecrãs estreitos,
+   forçando os dois blocos a 150px cada e empurrando "A seguir" para fora
+   do cartão. Isolar o min-width aqui evita esse conflito. */
+@media (min-width: 769px) {
+  .profile-follow-stat {
+    min-width: 150px;
+  }
+}
+
+.profile-follow-stat:hover {
+  border-color: rgba(var(--accent-strong-rgb), 0.4);
+  background: rgba(var(--surface-rgb), 0.5);
+}
+
+.profile-follow-stat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.profile-follow-stat-body .stat-tile-value {
+  font-size: 1.6rem;
+}
+
+.profile-follow-stat-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.72rem;
+  color: var(--accent);
+}
+
+/* Cartões "Subscrições ativas" do próprio membro — ver SubscriptionCard em
+   SubscriptionsSection.jsx. */
+.subscription-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.subscription-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+}
+
+.subscription-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.subscription-card-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subscription-card-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.subscription-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6b7280;
+  flex-shrink: 0;
+}
+
+.subscription-dot.active {
+  background: #34d399;
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.7);
+}
+
+.subscription-dot.late {
+  background: #fbbf24;
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.7);
+}
+
+.subscription-detail-late {
+  margin: 0;
+  font-weight: 600;
+  color: #fbbf24;
+}
+
+.subscription-card-action {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  min-height: 44px;
+}
+
+.subscription-card-hint {
+  flex-shrink: 0;
+  max-width: 120px;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.subscription-detail-price {
+  margin: 14px 0 4px;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--accent-light);
 }

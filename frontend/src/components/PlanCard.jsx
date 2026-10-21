@@ -7,21 +7,42 @@ import { IconDumbbell, IconPencil, IconPlay, IconSave, IconTrash } from "./Icons
 import { apiRequest } from "../api/client";
 import { muscleGroupVisual, visualForMuscleGroups } from "../utils/muscleGroups";
 import { formatReps } from "../utils/reps";
+import { setTypeInfo } from "../utils/setTypes";
 import PlanCreator from "./PlanCreator";
 import { INVALID_REPS_MESSAGE, dayHasInvalidReps, dayToForm, formDayToApi } from "../utils/planDayForm";
 
-// "4 × 8–12" / "4 séries" / "8–12 reps" consoante o que estiver definido.
-function formatTarget(ex) {
-  const reps = formatReps(ex.target_reps, ex.target_reps_max);
-  if (ex.target_sets && reps) return `${ex.target_sets} × ${reps}`;
-  if (ex.target_sets) return `${ex.target_sets} séries`;
-  if (reps) return `${reps} reps`;
-  return null;
+// "4 × 8–12" / "4 séries" / "8–12 reps" quando todas as séries têm o mesmo
+// alvo (o mais comum); senão lista cada série ("12×40kg · 10×50kg · 8×60kg"
+// — ex: pirâmide), já que aí não há um valor único que as resuma.
+function formatTarget(sets) {
+  if (!sets || sets.length === 0) return { badge: null, load: null };
+
+  const repsList = sets.map((s) => formatReps(s.target_reps, s.target_reps_max));
+  const loadList = sets.map((s) => (s.target_load != null ? Number(s.target_load) : null));
+  const uniform = repsList.every((r) => r === repsList[0]) && loadList.every((l) => l === loadList[0]);
+
+  if (uniform) {
+    const reps = repsList[0];
+    if (reps) return { badge: `${sets.length} × ${reps}`, load: loadList[0] };
+    if (sets.length > 1 || loadList[0] != null) return { badge: `${sets.length} séries`, load: loadList[0] };
+    return { badge: null, load: null };
+  }
+
+  const perSet = sets.map((_, i) => {
+    const r = repsList[i];
+    const l = loadList[i];
+    if (r && l != null) return `${r}×${l}kg`;
+    if (r) return r;
+    if (l != null) return `${l}kg`;
+    return `série ${i + 1}`;
+  });
+  return { badge: perSet.join(" · "), load: null };
 }
 
 function PlanExercise({ ex }) {
   const { icon: Icon, color } = muscleGroupVisual(ex.muscle_group);
-  const target = formatTarget(ex);
+  const target = formatTarget(ex.sets);
+  const type = setTypeInfo(ex.set_type);
   return (
     <li className="nplan-food">
       <span className="nplan-food-image plan-exercise-image" style={{ color }}>
@@ -30,12 +51,19 @@ function PlanExercise({ ex }) {
         {ex.image_url ? <img src={ex.image_url} alt="" loading="lazy" /> : <Icon size={22} />}
       </span>
       <span className="nplan-food-text">
-        <span className="nplan-food-name">{ex.exercise_name}</span>
+        <span className="nplan-food-name">
+          {ex.exercise_name}
+          {type.color && (
+            <span className="plan-exercise-type-badge" style={{ "--type-color": type.color }}>
+              {type.label}
+            </span>
+          )}
+        </span>
         {ex.muscle_group && <span className="nplan-food-meta">{ex.muscle_group}</span>}
       </span>
       <span className="plan-exercise-targets">
-        {target && <span className="nplan-food-quantity">{target}</span>}
-        {ex.target_load != null && <span className="plan-exercise-load">{Number(ex.target_load)} kg</span>}
+        {target.badge && <span className="nplan-food-quantity">{target.badge}</span>}
+        {target.load != null && <span className="plan-exercise-load">{target.load} kg</span>}
       </span>
     </li>
   );
@@ -43,7 +71,7 @@ function PlanExercise({ ex }) {
 
 // Edição de um só dia, no próprio lugar do dia no cartão — guarda só esse
 // dia (PUT /plans/:id/days/:dayId), sem mexer nos outros.
-function DayEditForm({ plan, day, exercises, onCancel, onSaved }) {
+function DayEditForm({ plan, day, exercises, records, onCancel, onSaved, onExerciseCreated, onExerciseDeleted }) {
   const [draft, setDraft] = useState(() => dayToForm(day));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -67,7 +95,14 @@ function DayEditForm({ plan, day, exercises, onCancel, onSaved }) {
 
   return (
     <form className="plan-form nplan-day-edit" onSubmit={handleSubmit}>
-      <PlanDayEditor day={draft} exercises={exercises} onChange={setDraft} />
+      <PlanDayEditor
+        day={draft}
+        exercises={exercises}
+        records={records}
+        onChange={setDraft}
+        onExerciseCreated={onExerciseCreated}
+        onExerciseDeleted={onExerciseDeleted}
+      />
       {error && <p className="error-text">{error}</p>}
       <div className="log-actions">
         <button type="button" className="glass-button glass-button-secondary" onClick={onCancel}>
@@ -89,7 +124,7 @@ function DayEditForm({ plan, day, exercises, onCancel, onSaved }) {
 // `canStart` mostra "Iniciar treino" em cada dia — só faz sentido nos
 // planos do próprio utilizador (o treino fica registado em nome de quem o
 // inicia).
-export default function PlanCard({ plan, exercises, editable: editableProp, canStart, onChanged }) {
+export default function PlanCard({ plan, exercises, records, editable: editableProp, canStart, onChanged, onExerciseCreated, onExerciseDeleted }) {
   const navigate = useNavigate();
   // Só quem criou o plano o pode alterar (o backend também o garante).
   const editable = editableProp && plan.can_edit;
@@ -115,6 +150,7 @@ export default function PlanCard({ plan, exercises, editable: editableProp, canS
     return (
       <NewPlanForm
         exercises={exercises}
+        records={records}
         submitPath={`/plans/${plan.id}`}
         method="PUT"
         initialPlan={plan}
@@ -123,6 +159,8 @@ export default function PlanCard({ plan, exercises, editable: editableProp, canS
           setEditing(false);
           onChanged?.();
         }}
+        onExerciseCreated={onExerciseCreated}
+        onExerciseDeleted={onExerciseDeleted}
       />
     );
   }
@@ -178,11 +216,14 @@ export default function PlanCard({ plan, exercises, editable: editableProp, canS
                 plan={plan}
                 day={day}
                 exercises={exercises}
+                records={records}
                 onCancel={() => setEditingDayId(null)}
                 onSaved={() => {
                   setEditingDayId(null);
                   onChanged?.();
                 }}
+                onExerciseCreated={onExerciseCreated}
+                onExerciseDeleted={onExerciseDeleted}
               />
             );
           }

@@ -185,6 +185,40 @@ testes feitos na outra máquina) — ver próxima secção.
 ======================================================================
 POR FAZER / EM ABERTO
 ======================================================================
+- CORRIGIDO (2026-10-20): requireAuth (middleware/auth.js) confiava em
+  gymId/role guardados no JWT no momento do login, válidos por 7 dias —
+  mas gym_id/role podem mudar entretanto (ex: o DONO atribui alguém como
+  CEO de um ginásio novo). Quem tivesse sessão aberta de antes da mudança
+  escrevia no ginásio ERRADO em qualquer endpoint que confiasse em
+  req.user.gymId, sem erro nenhum (ex: updateTheme alterou as cores de
+  outro ginásio). requireAuth agora confirma sempre gymId/role na BD a
+  cada pedido, nunca só do token — corrige isto para toda a app de uma
+  vez. Reproduzido, corrigido e verificado em local; mesma correção já
+  publicada em produção.
+- IMPORTANTE: registo em duas fases (migration 027) — confirmação de email
+  e login/registo com Google (authController.js register/verifyEmail/
+  resendVerification/googleAuth, services/email.js, routes/authRoutes.js;
+  frontend: RegisterPage/LoginPage/VerifyEmailPage/GoogleSignInButton).
+  Nenhum dos dois serviços externos está configurado ainda:
+    - Email: sem SMTP_HOST/SMTP_USER/SMTP_PASS no .env, o link de
+      confirmação só vai para o log do servidor (e, em dev, vem na própria
+      resposta da API em `dev_verification_link`, mostrado na página de
+      registo) — nunca é mandado a sério. Ver backend/.env.example.
+    - Google: sem GOOGLE_CLIENT_ID no backend/.env e VITE_GOOGLE_CLIENT_ID
+      no frontend/.env, o botão "Continuar com Google" fica escondido e o
+      endpoint POST /api/auth/google devolve 501. Ver backend/.env.example
+      para como criar um Client ID.
+  Contas antigas (antes desta migração) ficam com email_verified=true por
+  omissão — só quem se regista agora pelo formulário normal (sem Google)
+  nasce por confirmar.
+- IMPORTANTE: preço das subscrições (gym_service_prices, migration 025) é
+  por agora um valor fixo por ginásio e por serviço (ginásio/PT/nutrição),
+  igual para todos os membros. No mundo real, membros diferentes podem ter
+  preços diferentes consoante o plano que negociaram (ex: desconto,
+  promoção, plano anual vs mensal) — isto precisa de ser revisto para
+  granularidade por membro/plano, não só por ginásio. Usado no painel
+  "Gerir" das subscrições em O Teu Perfil (subscriptionController.js
+  nextRenewalDate/fetchSubscriptionsForMember).
 - O código de gestão (gymController, classController, financeController,
   scheduleGenerator, etc.) ainda não foi revisto linha a linha a fundo —
   só testado a correr (smoke test + uso real ao longo desta sessão).

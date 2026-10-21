@@ -1,8 +1,8 @@
-# Workout Tracker
+# Ironbound
 
 ## Overview
 
-Workout Tracker is a multi-tenant gym management platform. Members track their own workouts, nutrition and body composition; gyms use it to manage members, staff and subscriptions; personal trainers and nutritionists manage the clients assigned to them. Built as a full-stack portfolio project.
+Ironbound is a multi-tenant gym management platform. Members track their own workouts, nutrition and body composition; gyms use it to manage members, staff and subscriptions; personal trainers and nutritionists manage the clients assigned to them. Built as a full-stack portfolio project.
 
 ## Architecture
 

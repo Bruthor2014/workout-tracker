@@ -10,43 +10,41 @@ import {
   IconPlusCircle,
   IconMessage,
   IconUsers,
+  IconUserPlus,
   IconDownload,
   IconBuilding,
   IconClock,
   IconClipboard,
   IconBarChart,
   IconCheck,
+  IconX,
 } from "./Icons";
-import { TEAM_ROLES } from "../utils/roles";
+import { useSidebarMode } from "../hooks/useSidebarMode";
 
 const NAV_LINK_CLASS = ({ isActive }) => `sidebar-link${isActive ? " active" : ""}`;
 
-export default function Sidebar() {
+function ModeSwitch({ mode, setMode }) {
+  return (
+    <button type="button" className="sidebar-mode-switch"
+      onClick={() => setMode(mode === "individual" ? "profissional" : "individual")}
+      aria-pressed={mode === "profissional"}>
+      <span className={`sidebar-mode-switch-label${mode === "individual" ? " active" : ""}`}>Pessoal</span>
+      <span className="sidebar-mode-switch-track">
+        <span className="sidebar-mode-switch-knob" />
+      </span>
+      <span className={`sidebar-mode-switch-label${mode === "profissional" ? " active" : ""}`}>Profissional</span>
+    </button>
+  );
+}
+
+// `onNavigate`: chamado quando se escolhe um link (ou se tenta fechar) —
+// usado pela gaveta mobile para se fechar sozinha; no desktop é opcional.
+export default function Sidebar({ onNavigate }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
-  const isOwner = user?.role === "gym_owner";
-  const isDono = user?.role === "dono";
   const isReceptionStation = user?.role === "reception_station";
-  // Staff "pessoa" (PT, nutricionista, rececionista, estagiário): treina
-  // como um membro normal E tem tarefas profissionais no ginásio — por
-  // isso pode alternar entre os dois modos na sidebar.
-  const isStaffPerson = !!user && TEAM_ROLES.includes(user.role);
-
-  const [mode, setModeState] = useState("profissional");
-  useEffect(() => {
-    if (!user || !isStaffPerson) return;
-    try {
-      const saved = localStorage.getItem(`sidebarMode:${user.id}`);
-      if (saved === "individual" || saved === "profissional") setModeState(saved);
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
-
-  function setMode(next) {
-    setModeState(next);
-    try { if (user) localStorage.setItem(`sidebarMode:${user.id}`, next); } catch {}
-  }
+  const { mode, setMode, isOwner, isDono, isStaffPerson } = useSidebarMode(user);
 
   useEffect(() => {
     if (!user) return;
@@ -64,59 +62,149 @@ export default function Sidebar() {
 
   return (
     <aside className="sidebar glass">
-      <NavLink to={isDono ? "/dono" : isOwner ? "/management" : isReceptionStation ? "/occupancy" : "/dashboard"} className="sidebar-brand">
-        <IconLogoMark size={24} />
-        Workout Tracker
-      </NavLink>
+      <div className="sidebar-brand-row">
+        <NavLink to={isDono ? "/dono" : isOwner ? "/management" : isReceptionStation ? "/occupancy" : "/dashboard"} className="sidebar-brand">
+          <IconLogoMark size={24} />
+          Ironbound
+        </NavLink>
+        {onNavigate && (
+          <button type="button" className="sidebar-drawer-close" onClick={onNavigate} aria-label="Fechar menu">
+            <IconX size={18} />
+          </button>
+        )}
+      </div>
 
-      <nav className="sidebar-nav">
+      <nav
+        className="sidebar-nav"
+        onClick={(e) => {
+          if (onNavigate && e.target.closest("a")) onNavigate();
+        }}
+      >
         {isDono ? (
-          // DONO da plataforma: só vê os ginásios.
+          // DONO da plataforma: gere todos os ginásios, mas também é uma
+          // pessoa com os seus próprios treinos — alterna como o staff.
           <>
-            <NavLink to="/dono" className={NAV_LINK_CLASS}>
-              <span className="sidebar-link-icon"><IconBuilding size={24} /></span>
-              Ginásios
+            <ModeSwitch mode={mode} setMode={setMode} />
+
+            {mode === "individual" ? (
+              <>
+                <NavLink to="/plans" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon"><IconCalendar size={24} /></span>
+                  Planos de Treino
+                </NavLink>
+                <NavLink to="/nutrition" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon"><IconUtensils size={24} /></span>
+                  Planos de Nutrição
+                </NavLink>
+                <div className="sidebar-divider" />
+                <NavLink to="/dashboard" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon"><IconDumbbell size={24} /></span>
+                  Os teus treinos
+                </NavLink>
+                <NavLink to="/log" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon"><IconPlusCircle size={24} /></span>
+                  Registar treino
+                </NavLink>
+                {user.gym_id && (
+                  <NavLink to="/classes" className={NAV_LINK_CLASS}>
+                    <span className="sidebar-link-icon"><IconUsers size={24} /></span>
+                    Aulas de grupo
+                  </NavLink>
+                )}
+                <NavLink to="/friends" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon"><IconUserPlus size={24} /></span>
+                  Amigos
+                </NavLink>
+              </>
+            ) : (
+              <NavLink to="/dono" className={NAV_LINK_CLASS}>
+                <span className="sidebar-link-icon"><IconBuilding size={24} /></span>
+                Ginásios
+              </NavLink>
+            )}
+
+            <div className="sidebar-divider" />
+            <NavLink to="/messages" className={NAV_LINK_CLASS}>
+              <span className="sidebar-link-icon"><IconMessage size={24} /></span>
+              Mensagens
+              {unreadCount > 0 && <span className="sidebar-badge">{unreadCount}</span>}
             </NavLink>
           </>
         ) : isOwner ? (
-          // CEO: conta de gestão do ginásio — sem treinos nem planos próprios.
+          // CEO: gere o ginásio, mas também é uma pessoa com os seus
+          // próprios treinos — alterna como o staff e o dono.
           <>
-            <NavLink to="/management" className={NAV_LINK_CLASS}>
-              <span className="sidebar-link-icon">
-                <IconBuilding size={24} />
-              </span>
-              Gestão
-            </NavLink>
-            <NavLink to="/members" className={NAV_LINK_CLASS}>
-              <span className="sidebar-link-icon">
-                <IconUsers size={24} />
-              </span>
-              Membros
-            </NavLink>
-            <NavLink to="/classes" className={NAV_LINK_CLASS}>
-              <span className="sidebar-link-icon">
-                <IconCalendar size={24} />
-              </span>
-              Aulas de grupo
-            </NavLink>
-            <NavLink to="/team-schedule" className={NAV_LINK_CLASS}>
-              <span className="sidebar-link-icon">
-                <IconClock size={24} />
-              </span>
-              Horários da equipa
-            </NavLink>
-            <NavLink to="/occupancy" className={NAV_LINK_CLASS}>
-              <span className="sidebar-link-icon">
-                <IconClipboard size={24} />
-              </span>
-              Ocupação
-            </NavLink>
-            <NavLink to="/finance" className={NAV_LINK_CLASS}>
-              <span className="sidebar-link-icon">
-                <IconBarChart size={24} />
-              </span>
-              Financeiro
-            </NavLink>
+            <ModeSwitch mode={mode} setMode={setMode} />
+
+            {mode === "individual" ? (
+              <>
+                <NavLink to="/plans" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon"><IconCalendar size={24} /></span>
+                  Planos de Treino
+                </NavLink>
+                <NavLink to="/nutrition" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon"><IconUtensils size={24} /></span>
+                  Planos de Nutrição
+                </NavLink>
+                <div className="sidebar-divider" />
+                <NavLink to="/dashboard" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon"><IconDumbbell size={24} /></span>
+                  Os teus treinos
+                </NavLink>
+                <NavLink to="/log" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon"><IconPlusCircle size={24} /></span>
+                  Registar treino
+                </NavLink>
+                <NavLink to="/classes" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon"><IconUsers size={24} /></span>
+                  Aulas de grupo
+                </NavLink>
+                <NavLink to="/friends" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon"><IconUserPlus size={24} /></span>
+                  Amigos
+                </NavLink>
+              </>
+            ) : (
+              <>
+                <NavLink to="/management" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon">
+                    <IconBuilding size={24} />
+                  </span>
+                  Gestão
+                </NavLink>
+                <NavLink to="/members" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon">
+                    <IconUsers size={24} />
+                  </span>
+                  Membros
+                </NavLink>
+                <NavLink to="/classes" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon">
+                    <IconCalendar size={24} />
+                  </span>
+                  Aulas de grupo
+                </NavLink>
+                <NavLink to="/team-schedule" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon">
+                    <IconClock size={24} />
+                  </span>
+                  Horários da equipa
+                </NavLink>
+                <NavLink to="/occupancy" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon">
+                    <IconClipboard size={24} />
+                  </span>
+                  Ocupação
+                </NavLink>
+                <NavLink to="/finance" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon">
+                    <IconBarChart size={24} />
+                  </span>
+                  Financeiro
+                </NavLink>
+              </>
+            )}
+
             <div className="sidebar-divider" />
             <NavLink to="/messages" className={NAV_LINK_CLASS}>
               <span className="sidebar-link-icon">
@@ -160,15 +248,7 @@ export default function Sidebar() {
           // equipa — treina como um membro E tem tarefas profissionais no
           // ginásio. Alterna entre os dois conjuntos de navegação.
           <>
-            <button type="button" className="sidebar-mode-switch"
-              onClick={() => setMode(mode === "individual" ? "profissional" : "individual")}
-              aria-pressed={mode === "profissional"}>
-              <span className={`sidebar-mode-switch-label${mode === "individual" ? " active" : ""}`}>Pessoal</span>
-              <span className="sidebar-mode-switch-track">
-                <span className="sidebar-mode-switch-knob" />
-              </span>
-              <span className={`sidebar-mode-switch-label${mode === "profissional" ? " active" : ""}`}>Profissional</span>
-            </button>
+            <ModeSwitch mode={mode} setMode={setMode} />
 
             {mode === "individual" ? (
               <>
@@ -195,6 +275,10 @@ export default function Sidebar() {
                     Aulas de grupo
                   </NavLink>
                 )}
+                <NavLink to="/friends" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon"><IconUserPlus size={24} /></span>
+                  Amigos
+                </NavLink>
               </>
             ) : (
               <>
@@ -211,6 +295,10 @@ export default function Sidebar() {
                 <NavLink to="/schedule" className={NAV_LINK_CLASS}>
                   <span className="sidebar-link-icon"><IconClock size={24} /></span>
                   O meu horário
+                </NavLink>
+                <NavLink to="/my-finance" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon"><IconBarChart size={24} /></span>
+                  O meu financeiro
                 </NavLink>
                 {user.role === "receptionist" && (
                   <>
@@ -280,6 +368,12 @@ export default function Sidebar() {
                     Aulas de grupo
                   </NavLink>
                 )}
+                <NavLink to="/friends" className={NAV_LINK_CLASS}>
+                  <span className="sidebar-link-icon">
+                    <IconUserPlus size={24} />
+                  </span>
+                  Amigos
+                </NavLink>
                 <NavLink to="/messages" className={NAV_LINK_CLASS}>
                   <span className="sidebar-link-icon">
                     <IconMessage size={24} />

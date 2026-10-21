@@ -11,14 +11,13 @@ const STORAGE_KEY = "generator-options";
 const FUNCTIONS = [
   { value: "floor", label: "Sala" },
   { value: "reception", label: "Receção" },
-  { value: "classes", label: "Aulas" },
 ];
 // Igual ao backend (scheduleGenerator.js): funções por omissão de cada cargo.
 const DEFAULT_FUNCTIONS = {
-  personal_trainer: ["floor", "reception", "classes"],
+  personal_trainer: ["floor", "reception"],
   nutritionist: ["reception"],
   receptionist: ["reception"],
-  intern: ["reception", "classes"],
+  intern: ["reception"],
 };
 
 const PEAK_OPTIONS = TIME_OPTIONS.filter((t) => t.value >= "13:00" && t.value <= "20:00");
@@ -26,7 +25,6 @@ const FLOOR_OPTIONS = [
   { value: 1, label: "1 PT" },
   { value: 2, label: "2 PTs" },
 ];
-const CLASSES_OPTIONS = [0, 1, 2, 3, 4, 5].map((n) => ({ value: n, label: n === 0 ? "Nenhuma" : `${n} por dia` }));
 const DAYS_OPTIONS = [3, 4, 5, 6, 7].map((n) => ({ value: n, label: `${n} dias` }));
 
 function loadSaved() {
@@ -44,7 +42,6 @@ function initialOptions(staff) {
     peak_start: saved.peak_start || "17:00",
     peak_floor: saved.peak_floor ?? 2,
     base_floor: saved.base_floor ?? 1,
-    classes_per_day: saved.classes_per_day ?? 3,
     people: staff.map((s) => ({
       id: s.id,
       include: true,
@@ -75,6 +72,10 @@ export default function GenerateScheduleModal({ staff, onClose, onDone }) {
   const totalHours = included.reduce((sum, p) => sum + Number(p.max_hours || 0), 0);
 
   async function run() {
+    if (!window.confirm(
+      "Isto apaga TODOS os turnos atuais da equipa e substitui pelos novos. Não pode ser desfeito. " +
+      "As aulas de grupo não são tocadas — isso continua a gerir-se à mão. Continuar?"
+    )) return;
     setRunning(true);
     setError("");
     try {
@@ -120,10 +121,6 @@ export default function GenerateScheduleModal({ staff, onClose, onDone }) {
                 <div>
                   <span className="generate-field-label">Sala no resto do dia</span>
                   <Select value={options.base_floor} onChange={(v) => set("base_floor")(Number(v))} options={FLOOR_OPTIONS} ariaLabel="PTs fora da ponta" />
-                </div>
-                <div>
-                  <span className="generate-field-label">Aulas de grupo</span>
-                  <Select value={options.classes_per_day} onChange={(v) => set("classes_per_day")(Number(v))} options={CLASSES_OPTIONS} ariaLabel="Aulas por dia" />
                 </div>
               </div>
             </div>
@@ -186,13 +183,13 @@ export default function GenerateScheduleModal({ staff, onClose, onDone }) {
               </ul>
             </div>
             <p className="class-detail-alert">
-              Substitui todos os turnos e as aulas de grupo atuais. Palestras e eventos ficam como estão. Se alguma aula ficar sem PT, todos os PTs são avisados por mensagem.
+              Substitui todos os turnos atuais da equipa. As aulas de grupo não são tocadas — continuam a geri-se à mão em "Aulas de grupo".
             </p>
           </>
         ) : (
           <div className="generate-result">
             <p>
-              ✅ {result.shifts} turnos e {result.classes} aulas criados.{" "}
+              ✅ {result.shifts} turnos criados.{" "}
               {result.gaps.length === 0 ? "Todas as horas estão cobertas." : "Ficou por cobrir:"}
             </p>
             {result.gaps.length > 0 && (
@@ -207,9 +204,6 @@ export default function GenerateScheduleModal({ staff, onClose, onDone }) {
                   Para cobrir tudo, dá mais horas ou dias a alguém, junta mais funções (ex: Receção) ou adiciona alguém à equipa.
                 </p>
               </>
-            )}
-            {result.vacant_classes > 0 && (
-              <p className="class-detail-alert">{result.vacant_classes} aulas ficaram sem PT — os PTs foram avisados por mensagem.</p>
             )}
             {result.conflicts && result.conflicts.length > 0 && (
               <div className="class-detail-alert" style={{ background: "rgba(251,191,36,0.12)", borderColor: "rgba(251,191,36,0.4)" }}>

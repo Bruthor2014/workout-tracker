@@ -1,6 +1,6 @@
 import { addDays, toDateKey } from "../utils/date";
 import { workoutVisual } from "../utils/muscleGroups";
-import { IconChevronRight, IconDumbbell } from "./Icons";
+import { IconChevronRight } from "./Icons";
 
 const WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const MONTH_LABELS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
@@ -57,7 +57,6 @@ export default function WeekCalendar({ weekStart, selectedKey, workoutsByDate, o
 
       <div className="week-calendar">
         {days.map((day) => {
-          const Icon = day.visual ? day.visual.icon : IconDumbbell;
           const classes = ["week-day"];
           if (day.attended) classes.push("attended");
           if (day.isToday) classes.push("today");
@@ -73,9 +72,6 @@ export default function WeekCalendar({ weekStart, selectedKey, workoutsByDate, o
               aria-pressed={day.key === selectedKey}
               aria-label={`${day.label}, ${day.dayNumber}${day.attended ? " — com treino" : ""}`}
             >
-              <span className="week-day-icon">
-                <Icon size={day.visual ? 34 : 22} />
-              </span>
               <span className="week-day-text">
                 <span className="week-day-label">
                   {day.label}
