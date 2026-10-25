@@ -1,5 +1,5 @@
 WORKOUT TRACKER — ESTADO DO PROJETO
-Última atualização: 2026-10-17
+Última atualização: 2026-10-25
 
 Este ficheiro existe para continuidade entre máquinas/sessões — a conversa
 com o Claude e a memória local dele ficam presas a cada computador. Isto
@@ -14,11 +14,43 @@ STACK E BASE
 - Frontend: React 19 + Vite, React Router 7 (lazy-loaded por página)
 - Auth: JWT + bcrypt, role-based access control
 - Projeto no GitHub: https://github.com/Bruthor2014/workout-tracker
-- Supabase: existe um projeto Supabase (Postgres gerido) já com o schema
-  completo, pensado como futura base de dados de produção. Em 2026-10-14
-  a base de dados LOCAL foi substituída pelos dados do Supabase (que
-  tinham muito mais conteúdo de teste do que o local) — ver secção
-  "BASE DE DADOS" abaixo antes de assumir quem são os utilizadores locais.
+- Supabase: existe um projeto Supabase (Postgres gerido), agora a BASE DE
+  DADOS DE PRODUÇÃO a sério (ver secção PRODUÇÃO abaixo) — já não é só
+  "pensado como futura". A BD local continua uma cópia em Postgres normal,
+  separada.
+
+======================================================================
+PRODUÇÃO (2026-10-21, ver DEPLOY.md para o passo a passo completo)
+======================================================================
+O site está online a sério, não é só um exercício:
+- Frontend: Firebase Hosting, https://ironbound.pt (+ www), build a partir
+  de `frontend/dist` com `frontend/.env.production`.
+- Backend: Google Cloud Run (`ironbound-api`, região europe-west1), a
+  partir do `backend/Dockerfile` — deploy com
+  `gcloud run deploy ironbound-api --source . --region europe-west1
+  --allow-unauthenticated --port 8080`. Domínio: https://api.ironbound.pt.
+  Variáveis sensíveis (DATABASE_URL, JWT_SECRET, SUPABASE_SERVICE_ROLE_KEY)
+  em Google Secret Manager, não em env vars em texto simples.
+- Base de dados: o projeto Supabase da secção STACK, não a BD local —
+  qualquer migration nova tem de ser corrida nos DOIS sítios (local E
+  produção) à parte; não há deploy automático de schema.
+- Google login ATIVO em produção (GOOGLE_CLIENT_ID configurado, domínio
+  autorizado). Confirmação de email por SMTP continua por configurar — o
+  link de confirmação só existe no log do Cloud Run (ver POR FAZER).
+- Uploads (avatares, fotos de exercícios/refeições) em produção vão para
+  o Supabase Storage (`backend/services/storage.js`,
+  SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY/SUPABASE_STORAGE_BUCKET), não
+  para disco local — o Cloud Run apaga o disco do contentor sempre que
+  reinicia/escala. Local continua a usar disco (`backend/uploads/`).
+  `backend/scripts/migrateUploadsToSupabase.js` existe para mover uploads
+  antigos de disco para o Storage, se algum dia for preciso.
+- `gcloud` CLI está instalado nesta máquina mas NÃO está no PATH por
+  omissão — fica em
+  "C:\Users\MSI\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin".
+  Autenticado como ruben.francisco.correia2003@gmail.com, projeto
+  ironbound-512213.
+- gcloud/Firebase para esta app específica, nunca tocar nisto por engano:
+  projeto `ironbound-512213`, serviço Cloud Run `ironbound-api`.
 
 ======================================================================
 ROLES (já mudou três vezes — ver com atenção, sobretudo os dois novos)
@@ -74,12 +106,27 @@ FUNCIONALIDADES — o que existe hoje (alto nível)
 
 MEMBRO (uso pessoal)
 - Planos de treino multi-dia, planos de nutrição (refeição->opção->itens)
+- Plano de treino: cada exercício tem técnica (normal/drop set/rest-pause/
+  cluster/super-set/pirâmide/até à falha — migration 028, `set_type`) E
+  uma linha por SÉRIE planeada com o seu próprio alvo de reps/carga
+  (migration 029, tabela `plan_exercise_sets` — já não é um valor só para
+  todas as séries, dá para variar, ex: pirâmide). O recorde pessoal
+  (GET /sessions/records) aparece junto de cada exercício no editor do
+  plano. Ao iniciar um treino a partir de um dia do plano, a técnica e o
+  alvo de cada série já vêm pré-preenchidos.
 - Composição corporal com gráficos de evolução
 - Treinos em direto (cronómetro) ou manuais
 - Dashboard: calendário semanal, estatísticas reais, progresso mensal
 - Seletor de exercícios com pesquisa + filtro por grupo muscular + imagem
-  real por exercício (catálogo com ~200 exercícios, incl. Cardio)
+  real por exercício (catálogo com ~200 exercícios, incl. Cardio) +
+  exercícios PESSOAIS criados pelo próprio (owner_id, migration 024 — só
+  visíveis para quem os criou, nunca entram no catálogo do ginásio)
 - Mensagens diretas — já dá para pesquisar contactos por nome OU email
+- Amigos/seguidores (migration 023): seguir é direto, sem aprovação;
+  FriendsPage lista seguidores/a seguir, FriendComparePage compara
+  estatísticas de treino com um amigo
+- O Teu Financeiro (MyFinancePage): membro vê o estado das suas próprias
+  subscrições/pagamentos, sem precisar de ser staff
 
 GESTÃO DE GINÁSIO (gym_owner/"CEO")
 - Painel "Gestão" (/management): membros, ativos/inativos, treinos da
@@ -124,6 +171,36 @@ TEMA DO GINÁSIO (2026-10-16, reescrito de propósito)
   (--accent, --accent-strong, --accent-deep, --accent-light, as versões
   *-rgb de cada uma, --surface-rgb/--surface-strong-rgb para fundos
   neutros, --bg-base, --glass-bg(-strong), --glass-border, --bg-image).
+- IMPORTANTE (2026-10-21): o tema POR OMISSÃO (sem gym_owner ter escolhido
+  cores) deixou de ser o roxo/glassmorphism original — passou a um visual
+  "grafite + lima" achatado (sem gradientes/glow, raios de canto
+  pequenos), definido em `frontend/src/index.css` `:root`. Isto é só a
+  BASE; o mecanismo de tema por ginásio (acima) continua a funcionar
+  exatamente na mesma por cima, via as mesmas custom properties — um CEO
+  que escolha cores próprias continua a sobrepor-se ao grafite+lima. Já
+  em produção, não é só uma experiência local.
+
+======================================================================
+REDESIGN VISUAL (2026-10-21, ver resto do ficheiro para o que ainda falta)
+======================================================================
+Pedido do utilizador: tornar o visual "menos IA" (menos gradientes,
+glassmorphism, emojis, cards com borda colorida à esquerda). Aplicado a
+toda a app, não só ao dashboard. Pontos a saber:
+- Vários bugs reais apanhados nesta limpeza, não só estética:
+  `.profile-follow-stat` tinha duas regras CSS a competir (uma dentro de
+  @media, outra não) — por ordem de cascata a de fora ganhava sempre,
+  mesmo em ecrãs estreitos, empurrando "A seguir" para fora do cartão no
+  perfil em telemóvel.
+  `DEFAULT_VISUAL`/`Peito` em `utils/muscleGroups.js` e vários ícones/
+  badges "Hoje" ainda tinham cores roxo/rosa do tema antigo, por cima do
+  novo tema — mudados para cinzento neutro / lima consoante o caso.
+  `.glass-button-secondary` não tinha `color` próprio e herdava o
+  `color` escuro do botão principal (pensado para fundo claro) — texto
+  invisível em botões secundários em toda a app.
+- Protótipo/mockups feitos com o Artifact tool (Design canvas) em
+  https://claude.ai/artifact/CpHUjM2Bqs8PA1CJCQjbAe antes de cada ronda
+  de implementação — útil para alinhar direção visual antes de mexer em
+  CSS a sério.
 
 ======================================================================
 BUGS REAIS ENCONTRADOS E CORRIGIDOS (cronológico)
@@ -163,9 +240,23 @@ BUGS REAIS ENCONTRADOS E CORRIGIDOS (cronológico)
 ======================================================================
 BASE DE DADOS
 ======================================================================
-Migrations incrementais em backend/db/migrations/001...020 — todas
+Migrations incrementais em backend/db/migrations/001...029 — todas
 escritas de forma defensiva (IF NOT EXISTS / IF EXISTS), seguras de
-correr mais que uma vez. Se abrires este projeto numa BD desatualizada:
+correr mais que uma vez. Correr uma migration nova em AMBAS as bases —
+local (via o loop abaixo, ou um script node com `pg` direto) E produção
+(Supabase — buscar a connection string em Secret Manager:
+`gcloud secrets versions access latest --secret=database-url`, já com o
+PATH do gcloud tratado na secção PRODUÇÃO). Sem isto o código novo
+funciona em local e rebenta em produção (coluna/tabela em falta).
+`backend/db/supabase_setup.sql` é o ficheiro combinado (schema + replay
+de todas as migrations) para colar de uma vez no SQL editor do Supabase
+— mantém sincronizado sempre que mexeres numa tabela: o CREATE TABLE
+base NUNCA deve ganhar colunas que uma migration posterior ainda espera
+remover/migrar (ver migration 029 para um exemplo — o CREATE TABLE base
+de `plan_exercises` manteve as colunas antigas, só a migration no fim do
+ficheiro é que as migra e remove).
+
+Se abrires este projeto numa BD desatualizada:
 
   cd backend/db/migrations
   for f in *.sql; do
@@ -195,22 +286,37 @@ POR FAZER / EM ABERTO
   cada pedido, nunca só do token — corrige isto para toda a app de uma
   vez. Reproduzido, corrigido e verificado em local; mesma correção já
   publicada em produção.
-- IMPORTANTE: registo em duas fases (migration 027) — confirmação de email
-  e login/registo com Google (authController.js register/verifyEmail/
-  resendVerification/googleAuth, services/email.js, routes/authRoutes.js;
-  frontend: RegisterPage/LoginPage/VerifyEmailPage/GoogleSignInButton).
-  Nenhum dos dois serviços externos está configurado ainda:
-    - Email: sem SMTP_HOST/SMTP_USER/SMTP_PASS no .env, o link de
-      confirmação só vai para o log do servidor (e, em dev, vem na própria
-      resposta da API em `dev_verification_link`, mostrado na página de
-      registo) — nunca é mandado a sério. Ver backend/.env.example.
-    - Google: sem GOOGLE_CLIENT_ID no backend/.env e VITE_GOOGLE_CLIENT_ID
-      no frontend/.env, o botão "Continuar com Google" fica escondido e o
-      endpoint POST /api/auth/google devolve 501. Ver backend/.env.example
-      para como criar um Client ID.
+- ATUALIZADO (2026-10-21): registo em duas fases (migration 027) —
+  confirmação de email e login/registo com Google (authController.js
+  register/verifyEmail/resendVerification/googleAuth, services/email.js,
+  routes/authRoutes.js; frontend: RegisterPage/LoginPage/VerifyEmailPage/
+  GoogleSignInButton). Estado atual:
+    - Google: CONFIGURADO e ATIVO, local e em produção (GOOGLE_CLIENT_ID/
+      VITE_GOOGLE_CLIENT_ID definidos, domínio ironbound.pt autorizado nas
+      Authorized JavaScript origins). Login com Google cria conta logo
+      com `is_new`, pede o nome antes de avançar (GoogleSignInButton.jsx,
+      ConfirmNameStep).
+    - Email: AINDA sem SMTP configurado (sem SMTP_HOST/SMTP_USER/SMTP_PASS
+      no .env), tanto local como em produção. O link de confirmação só
+      existe no log do servidor (Cloud Run em produção) e, em dev, vem na
+      resposta da API em `dev_verification_link`. Ver backend/.env.example
+      para como ligar um SMTP a sério (Gmail precisa de "App Password").
   Contas antigas (antes desta migração) ficam com email_verified=true por
   omissão — só quem se regista agora pelo formulário normal (sem Google)
   nasce por confirmar.
+- EM ABERTO (2026-10-25): app Android via Capacitor, para gerar um .apk
+  a sério. `frontend/android/` já está montado (`npx cap add android`,
+  `capacitor.config.json` com appId `pt.ironbound.app`, aponta para a API
+  de produção via `.env.production`), scripts `npm run android:sync` /
+  `npm run android:open` no frontend/package.json. BLOQUEADO: esta
+  máquina não tem Android Studio nem Android SDK instalados (só um JDK
+  1.8 muito antigo — é preciso um JDK 17+). O disco C: só tem ~1.7 GB
+  livres (D: tem ~417 GB) — ao instalar o Android Studio, É PRECISO
+  escolher uma pasta no D: (tanto para o próprio Android Studio como
+  para o Android SDK no assistente de primeira abertura), senão a
+  instalação falha por falta de espaço. Depois de instalado, o resto
+  (gerar o .apk) é rápido — Build > Build Bundle(s)/APK(s) no Android
+  Studio, ou `gradlew assembleDebug` por linha de comandos.
 - IMPORTANTE: preço das subscrições (gym_service_prices, migration 025) é
   por agora um valor fixo por ginásio e por serviço (ginásio/PT/nutrição),
   igual para todos os membros. No mundo real, membros diferentes podem ter
@@ -257,5 +363,7 @@ Terminal 1: cd backend  && npm run dev   (porta 3000)
 Terminal 2: cd frontend && npm run dev   (porta 5173)
 Abrir http://localhost:5173
 
-Dependências: compression, express-rate-limit (backend) — correr
-`npm install` em backend/ se vindo de uma versão antiga.
+Se vindo de uma versão antiga do projeto, correr `npm install` em
+backend/ e frontend/ (dependências novas foram sendo acrescentadas:
+compression, express-rate-limit, google-auth-library, nodemailer,
+@supabase/supabase-js no backend; @capacitor/* no frontend).

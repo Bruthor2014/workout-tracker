@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Ironbound</string>
+    <string name="title_activity_main">Ironbound</string>
+    <string name="package_name">pt.ironbound.app</string>
+    <string name="custom_url_scheme">pt.ironbound.app</string>
+</resources>
