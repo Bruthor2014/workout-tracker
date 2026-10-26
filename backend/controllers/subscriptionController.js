@@ -47,7 +47,9 @@ async function fetchSubscriptionsForMember(memberId, gymId) {
             staff.role AS assigned_staff_role,
             sub.paid_until,
             price.price_cents,
-            price.billing_period
+            price.billing_period,
+            ovr.price_cents AS ovr_price_cents,
+            ovr.billing_period AS ovr_billing_period
        FROM (VALUES ('personal_training'), ('nutrition_plan'), ('gym_membership')) AS st(service_type)
        LEFT JOIN LATERAL (
          SELECT is_active, assigned_staff_id, paid_until
@@ -58,21 +60,28 @@ async function fetchSubscriptionsForMember(memberId, gymId) {
        ) sub ON true
        LEFT JOIN users staff ON staff.id = sub.assigned_staff_id
        LEFT JOIN gym_service_prices price
-         ON price.gym_id = $2 AND price.service_type = st.service_type::service_type`,
+         ON price.gym_id = $2 AND price.service_type = st.service_type::service_type
+       LEFT JOIN subscription_price_overrides ovr
+         ON ovr.member_id = $1 AND ovr.service_type = st.service_type::service_type`,
     [memberId, gymId]
   );
 
   const byService = {};
   for (const row of result.rows) {
+    // Preço negociado para este membro (migration 033) sobrepõe-se ao
+    // preço fixo do ginásio quando existe — ver subscription_price_overrides.
+    const priceCents = row.ovr_price_cents ?? row.price_cents;
+    const billingPeriod = row.ovr_billing_period ?? row.billing_period;
     byService[row.service_type] = {
       is_active: row.is_active,
       assigned_staff_id: row.assigned_staff_id,
       assigned_staff_name: row.assigned_staff_name,
       assigned_staff_role: row.assigned_staff_role,
-      price_cents: row.price_cents,
-      billing_period: row.billing_period,
-      next_renewal_date: row.is_active && row.price_cents != null ? toDateStr(row.paid_until) : null,
-      payment_status: row.is_active && row.price_cents != null ? paymentStatus(row.paid_until) : null,
+      price_cents: priceCents,
+      billing_period: billingPeriod,
+      is_custom_price: row.ovr_price_cents != null,
+      next_renewal_date: row.is_active && priceCents != null ? toDateStr(row.paid_until) : null,
+      payment_status: row.is_active && priceCents != null ? paymentStatus(row.paid_until) : null,
     };
   }
   return byService;
@@ -216,4 +225,64 @@ async function updateMemberSubscription(req, res) {
   });
 }
 
-module.exports = { getMemberSubscriptions, getMySubscriptions, updateMemberSubscription };
+// PUT /api/members/:id/subscriptions/:serviceType/price — define um preço
+// próprio para este membro (desconto/promoção/plano anual), sobrepondo-se
+// ao preço fixo do ginásio só para ele.
+async function setPriceOverride(req, res) {
+  const { serviceType } = req.params;
+  const { price_cents, billing_period } = req.body;
+
+  if (!SERVICE_TYPES.includes(serviceType)) {
+    return res.status(400).json({ message: "Tipo de subscrição inválido." });
+  }
+  if (!Number.isInteger(price_cents) || price_cents < 0) {
+    return res.status(400).json({ message: "price_cents tem de ser um número inteiro >= 0." });
+  }
+  // Mesmos valores que o frontend sabe mostrar (SubscriptionsSection.jsx:
+  // billing_period === "yearly" ? "ano" : "mês") — qualquer outra coisa
+  // ficava guardada mas seria sempre lida como "mês".
+  if (billing_period != null && !["monthly", "yearly"].includes(billing_period)) {
+    return res.status(400).json({ message: "billing_period tem de ser 'monthly' ou 'yearly'." });
+  }
+
+  const member = await findMember(req.params.id, req.user.gymId);
+  if (!member) {
+    return res.status(404).json({ message: "Membro não encontrado." });
+  }
+
+  await pool.query(
+    `INSERT INTO subscription_price_overrides (member_id, service_type, price_cents, billing_period, set_by)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (member_id, service_type)
+     DO UPDATE SET price_cents = $3, billing_period = $4, set_by = $5, created_at = now()`,
+    [req.params.id, serviceType, price_cents, billing_period || null, req.user.id]
+  );
+
+  res.json(await fetchSubscriptionsForMember(req.params.id, req.user.gymId));
+}
+
+// DELETE /api/members/:id/subscriptions/:serviceType/price — remove o
+// preço próprio; volta a valer o preço fixo do ginásio.
+async function clearPriceOverride(req, res) {
+  const { serviceType } = req.params;
+  if (!SERVICE_TYPES.includes(serviceType)) {
+    return res.status(400).json({ message: "Tipo de subscrição inválido." });
+  }
+  const member = await findMember(req.params.id, req.user.gymId);
+  if (!member) {
+    return res.status(404).json({ message: "Membro não encontrado." });
+  }
+  await pool.query(`DELETE FROM subscription_price_overrides WHERE member_id = $1 AND service_type = $2`, [
+    req.params.id,
+    serviceType,
+  ]);
+  res.json(await fetchSubscriptionsForMember(req.params.id, req.user.gymId));
+}
+
+module.exports = {
+  getMemberSubscriptions,
+  getMySubscriptions,
+  updateMemberSubscription,
+  setPriceOverride,
+  clearPriceOverride,
+};

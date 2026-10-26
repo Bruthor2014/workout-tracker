@@ -84,7 +84,11 @@ CREATE TABLE member_subscriptions (
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- Pago até esta data — "em dia" se >= hoje, "em atraso" se < hoje. Só
     -- um aviso visual no perfil, não mexe em contagens nem em acessos.
-    paid_until         DATE DEFAULT CURRENT_DATE
+    paid_until         DATE DEFAULT CURRENT_DATE,
+    -- Para que paid_until já foi enviado um lembrete de renovação (migration
+    -- 034) — não só "se já foi", para o lembrete voltar a disparar sozinho
+    -- quando paid_until avançar para um novo ciclo.
+    reminder_sent_for  DATE
 );
 
 -- Impede duas subscrições ativas do mesmo tipo para o mesmo membro
@@ -103,6 +107,20 @@ CREATE TABLE gym_service_prices (
     price_cents     INTEGER NOT NULL,
     billing_period  VARCHAR(20) NOT NULL DEFAULT 'monthly',
     UNIQUE (gym_id, service_type)
+);
+
+-- Preço negociado por membro (ex: desconto, promoção, plano anual em vez de
+-- mensal) — sobrepõe-se ao preço de gym_service_prices só para esse
+-- membro/serviço (migration 033). Sem linha aqui, vale o preço do ginásio.
+CREATE TABLE subscription_price_overrides (
+    id              SERIAL PRIMARY KEY,
+    member_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    service_type    service_type NOT NULL,
+    price_cents     INTEGER NOT NULL,
+    billing_period  VARCHAR(20),
+    set_by          INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (member_id, service_type)
 );
 
 -- Catálogo de exercícios (por ginásio, não global)
@@ -258,8 +276,20 @@ CREATE TABLE nutrition_plans (
     created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
     name         VARCHAR(150) NOT NULL,
     description  TEXT,
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    -- Com mais do que um plano, só o ativo conta para a estatística de
+    -- refeições cumpridas (ver GET /nutrition-plans/completion-summary).
+    is_active    BOOLEAN NOT NULL DEFAULT false,
+    -- Ordem escolhida pelo membro na lista colapsada (NutritionPage.jsx) —
+    -- não é por data de criação.
+    order_index  INTEGER NOT NULL DEFAULT 0,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Desde quando está ativo (não é created_at — pode ter sido escolhido
+    -- como ativo bem depois de criado, ou trocado várias vezes).
+    active_since TIMESTAMPTZ
 );
+
+-- No máximo um plano ativo por membro.
+CREATE UNIQUE INDEX idx_nutrition_plans_one_active ON nutrition_plans(member_id) WHERE is_active;
 
 CREATE TABLE meal_slots (
     id                  SERIAL PRIMARY KEY,
@@ -294,6 +324,17 @@ CREATE TABLE meal_option_items (
     protein_100g     NUMERIC(6,2),
     carbs_100g       NUMERIC(6,2),
     fat_100g         NUMERIC(6,2)
+);
+
+-- Marcar, por dia, se uma refeição do plano foi concluída (checkbox "já
+-- comi isto hoje"). Uma linha por refeição/dia; apagar desmarca.
+CREATE TABLE meal_completions (
+    id            SERIAL PRIMARY KEY,
+    meal_slot_id  INTEGER NOT NULL REFERENCES meal_slots(id) ON DELETE CASCADE,
+    member_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    completed_at  DATE NOT NULL DEFAULT CURRENT_DATE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (meal_slot_id, member_id, completed_at)
 );
 
 -- Mensagens diretas entre dois utilizadores do mesmo ginásio (membro <->
@@ -471,6 +512,7 @@ CREATE INDEX idx_plan_exercise_sets_pe ON plan_exercise_sets(plan_exercise_id);
 CREATE INDEX idx_meal_slots_plan ON meal_slots(nutrition_plan_id);
 CREATE INDEX idx_meal_options_slot ON meal_options(meal_slot_id);
 CREATE INDEX idx_meal_option_items_option ON meal_option_items(meal_option_id);
+CREATE INDEX idx_meal_completions_member_date ON meal_completions(member_id, completed_at);
 CREATE INDEX idx_messages_sender ON messages(sender_id, created_at);
 CREATE INDEX idx_messages_recipient ON messages(recipient_id, created_at);
 

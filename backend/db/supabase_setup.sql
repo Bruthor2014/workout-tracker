@@ -1154,3 +1154,67 @@ BEGIN
         DROP COLUMN target_load;
   END IF;
 END $$;
+
+-- 030: marcar, por dia, se uma refeição do plano de nutrição foi concluída
+-- (checkbox "já comi isto hoje").
+CREATE TABLE IF NOT EXISTS meal_completions (
+    id            SERIAL PRIMARY KEY,
+    meal_slot_id  INTEGER NOT NULL REFERENCES meal_slots(id) ON DELETE CASCADE,
+    member_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    completed_at  DATE NOT NULL DEFAULT CURRENT_DATE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (meal_slot_id, member_id, completed_at)
+);
+CREATE INDEX IF NOT EXISTS idx_meal_completions_member_date ON meal_completions(member_id, completed_at);
+
+-- 031: com mais do que um plano de nutrição, o membro escolhe qual está
+-- ativo — só esse conta para a estatística de refeições cumpridas.
+ALTER TABLE nutrition_plans
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT false;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_nutrition_plans_one_active
+    ON nutrition_plans(member_id) WHERE is_active;
+WITH latest AS (
+  SELECT DISTINCT ON (member_id) id
+    FROM nutrition_plans
+   ORDER BY member_id, created_at DESC
+)
+UPDATE nutrition_plans SET is_active = true
+ WHERE id IN (SELECT id FROM latest)
+   AND NOT EXISTS (
+     SELECT 1 FROM nutrition_plans np2
+      WHERE np2.member_id = nutrition_plans.member_id AND np2.is_active
+   );
+
+-- 032: ordem manual dos planos de nutrição de cada membro.
+ALTER TABLE nutrition_plans
+    ADD COLUMN IF NOT EXISTS order_index INTEGER NOT NULL DEFAULT 0;
+WITH numbered AS (
+  SELECT id, row_number() OVER (PARTITION BY member_id ORDER BY created_at DESC) - 1 AS rn
+    FROM nutrition_plans
+)
+UPDATE nutrition_plans np SET order_index = numbered.rn
+  FROM numbered
+ WHERE numbered.id = np.id AND np.order_index = 0;
+
+-- 033: preço negociado por membro (desconto/promoção/plano anual) —
+-- sobrepõe-se ao preço fixo de gym_service_prices só para esse membro.
+CREATE TABLE IF NOT EXISTS subscription_price_overrides (
+    id              SERIAL PRIMARY KEY,
+    member_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    service_type    service_type NOT NULL,
+    price_cents     INTEGER NOT NULL,
+    billing_period  VARCHAR(20),
+    set_by          INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (member_id, service_type)
+);
+
+-- 034: para que paid_until já foi enviado um lembrete de renovação.
+ALTER TABLE member_subscriptions
+    ADD COLUMN IF NOT EXISTS reminder_sent_for DATE;
+
+-- 035: desde quando um plano de nutrição está ativo (para "Ativo há X dias").
+ALTER TABLE nutrition_plans
+    ADD COLUMN IF NOT EXISTS active_since TIMESTAMPTZ;
+UPDATE nutrition_plans SET active_since = created_at
+ WHERE is_active AND active_since IS NULL;

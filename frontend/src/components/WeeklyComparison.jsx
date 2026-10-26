@@ -4,7 +4,7 @@ import { IconDumbbell, IconArrowUp, IconFlame, IconWeightStack } from "./Icons";
 import { apiRequest } from "../api/client";
 import { startOfWeek, addDays, toDateKey } from "../utils/date";
 
-const DAYS_OF_HISTORY = 60; // suficiente para esta semana + a anterior + um streak razoável
+const DAYS_OF_HISTORY = 75; // esta semana/mês + a semana/mês anterior completos + um streak razoável
 const MONTH_WEEKS = 5; // esta semana + 4 anteriores, para o "Progresso mensal"
 
 // Variação em % face à semana passada. Sem nada na semana passada não há
@@ -171,16 +171,32 @@ function LineChart({ weeks }) {
 // dias treinados esta semana vs a semana passada, volume total, streak de
 // dias consecutivos, e o volume diário desta semana para o mini-gráfico.
 // Tudo calculado a partir de dados reais, nada decorativo.
-export default function WeeklyComparison() {
+// `selectedWeekStart` (opcional): a semana que o calendário do Dashboard
+// está a mostrar (ver DashboardPage.jsx) — sem isto, os cartões ficavam
+// sempre presos à semana real de hoje, mesmo depois de navegar para trás
+// no calendário. Sem a prop, usa a semana atual a sério (mesmo
+// comportamento de antes). O streak é sempre em relação a HOJE a sério,
+// mesmo a ver semanas antigas — "streak atual" não faz sentido recalculado
+// no passado.
+export default function WeeklyComparison({ weekStart: selectedWeekStart }) {
   const [stats, setStats] = useState(null);
   const [error, setError] = useState("");
+  const selectedWeekKey = selectedWeekStart ? toDateKey(selectedWeekStart) : null;
 
   useEffect(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const thisWeekStart = startOfWeek(today);
+    const realThisWeekStart = startOfWeek(today);
+    const thisWeekStart = selectedWeekStart ? startOfWeek(selectedWeekStart) : realThisWeekStart;
+    const isCurrentWeek = toDateKey(thisWeekStart) === toDateKey(realThisWeekStart);
+    // "Visto a partir de": hoje a sério na semana atual; o domingo dessa
+    // semana se for uma semana passada (já aconteceu toda).
+    const asOf = isCurrentWeek ? today : addDays(thisWeekStart, 6);
     const lastWeekStart = addDays(thisWeekStart, -7);
-    const rangeStart = addDays(today, -DAYS_OF_HISTORY);
+    // Começa a contar para trás a partir da semana vista (não de hoje), mas
+    // acaba sempre em hoje a sério — para o streak ter sempre os dias mais
+    // recentes disponíveis, mesmo a ver uma semana antiga.
+    const rangeStart = addDays(thisWeekStart, -DAYS_OF_HISTORY);
 
     apiRequest(`/sessions?from=${toDateKey(rangeStart)}&to=${toDateKey(today)}`)
       .then((sessions) => {
@@ -209,24 +225,35 @@ export default function WeeklyComparison() {
           return { total, count, sessions: sessionCount };
         }
 
-        // Comparação justa: a semana passada só conta até ao mesmo dia da
-        // semana de hoje (numa terça compara Seg-Ter com Seg-Ter), senão a
-        // percentagem seria sempre negativa no início da semana.
-        const daysElapsed = Math.round((today - thisWeekStart) / 86400000) + 1;
-        const thisWeek = sumVolumeInRange(thisWeekStart, daysElapsed);
-        const lastWeek = sumVolumeInRange(lastWeekStart, daysElapsed);
+        // Esta semana: só até "asOf" (hoje, ou o fim de semana já passado).
+        // Semana passada: sempre completa (já aconteceu toda) — comparar
+        // "1 treino esta semana" com "3 a semana passada" tem de dar -67%,
+        // não 0% por limitar as duas ao mesmo nº de dias.
+        const daysThisWeek = Math.round((asOf - thisWeekStart) / 86400000) + 1;
+        const thisWeek = sumVolumeInRange(thisWeekStart, daysThisWeek);
+        const lastWeek = sumVolumeInRange(lastWeekStart, 7);
 
-        // Progresso mensal: quantos treinos houve em cada uma das últimas
-        // MONTH_WEEKS semanas (esta incluída) — frequência, não volume.
+        // Mês de referência: o mês onde cai a segunda-feira da semana
+        // vista. "Este mês" só até "asOf"; "mês passado" sempre completo.
+        const refMonthStart = new Date(thisWeekStart.getFullYear(), thisWeekStart.getMonth(), 1);
+        const daysThisMonth = Math.round((asOf - refMonthStart) / 86400000) + 1;
+        const thisMonth = sumVolumeInRange(refMonthStart, daysThisMonth);
+        const lastMonthStart = new Date(refMonthStart.getFullYear(), refMonthStart.getMonth() - 1, 1);
+        const lastMonthDays = new Date(refMonthStart.getFullYear(), refMonthStart.getMonth(), 0).getDate();
+        const lastMonth = sumVolumeInRange(lastMonthStart, lastMonthDays);
+
+        // Gráfico "Progresso mensal": nº de treinos em cada uma das últimas
+        // MONTH_WEEKS semanas, a terminar na semana vista.
         const monthlyProgress = Array.from({ length: MONTH_WEEKS }, (_, i) => {
-          const weekStart = addDays(thisWeekStart, -7 * (MONTH_WEEKS - 1 - i));
-          const { sessions: count } = sumVolumeInRange(weekStart, 7);
-          return { label: `${weekStart.getDate()}/${weekStart.getMonth() + 1}`, count };
+          const ws = addDays(thisWeekStart, -7 * (MONTH_WEEKS - 1 - i));
+          const { sessions: count } = sumVolumeInRange(ws, 7);
+          return { label: `${ws.getDate()}/${ws.getMonth() + 1}`, count };
         });
 
         // Streak: dias consecutivos com treino, a contar para trás a partir
-        // de hoje — se ainda não treinaste hoje, começa a contar de ontem
-        // (não zera o streak só porque o dia ainda não acabou).
+        // de HOJE a sério (não da semana vista) — se ainda não treinaste
+        // hoje, começa a contar de ontem (não zera só porque o dia ainda
+        // não acabou).
         let streak = 0;
         let cursor = attendedDates.has(toDateKey(today)) ? today : addDays(today, -1);
         while (attendedDates.has(toDateKey(cursor))) {
@@ -236,21 +263,20 @@ export default function WeeklyComparison() {
 
         setStats({
           workoutsThisWeek: thisWeek.count,
-          workoutsLastWeek: lastWeek.count,
+          workoutsDelta: pctDelta(thisWeek.count, lastWeek.count),
           volumeThisWeek: thisWeek.total,
-          volumeLastWeek: lastWeek.total,
+          volumeDelta: pctDelta(thisWeek.total, lastWeek.total),
+          monthlyDelta: pctDelta(thisMonth.sessions, lastMonth.sessions),
           streak,
           monthlyProgress,
         });
       })
       .catch((err) => setError(err.message));
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWeekKey]);
 
   if (error) return <p className="error-text">{error}</p>;
   if (!stats) return <p className="text-secondary">A carregar...</p>;
-
-  const workoutsDelta = pctDelta(stats.workoutsThisWeek, stats.workoutsLastWeek);
-  const volumeDelta = pctDelta(stats.volumeThisWeek, stats.volumeLastWeek);
 
   return (
     <div className="stats-row">
@@ -264,7 +290,7 @@ export default function WeeklyComparison() {
         <div className="stat-tile-value-row">
           <span className="stat-tile-value">{stats.workoutsThisWeek}</span>
           <span className="stat-tile-unit">/ 7</span>
-          <DeltaBadge value={workoutsDelta} />
+          <DeltaBadge value={stats.workoutsDelta} />
         </div>
         <span className="stat-tile-sub">{workoutsCaption(stats.workoutsThisWeek)}</span>
         <div className="progress-track">
@@ -277,12 +303,12 @@ export default function WeeklyComparison() {
           <span className="stat-tile-icon">
             <IconWeightStack size={22} />
           </span>
-          <span className="stat-tile-label">Volume total</span>
+          <span className="stat-tile-label">Volume esta semana</span>
         </div>
         <div className="stat-tile-value-row">
           <span className="stat-tile-value">{Math.round(stats.volumeThisWeek).toLocaleString("pt-PT")}</span>
           <span className="stat-tile-unit">kg</span>
-          <DeltaBadge value={volumeDelta} />
+          <DeltaBadge value={stats.volumeDelta} />
         </div>
         <span className="stat-tile-sub">vs semana passada</span>
       </GlassCard>
@@ -307,8 +333,9 @@ export default function WeeklyComparison() {
       <GlassCard className="stat-tile chart" strong>
         <div className="stat-tile-header">
           <span className="stat-tile-title">Progresso mensal</span>
-          <DeltaBadge value={workoutsDelta} />
+          <DeltaBadge value={stats.monthlyDelta} />
         </div>
+        <span className="text-secondary" style={{ fontSize: "0.78rem" }}>Nº de treinos vs mês passado</span>
         <LineChart weeks={stats.monthlyProgress} />
       </GlassCard>
     </div>

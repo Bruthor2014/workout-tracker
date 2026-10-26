@@ -6,6 +6,7 @@ import AvatarUploader from "../components/AvatarUploader";
 import BodyMetricsSection from "../components/BodyMetricsSection";
 import ProfileProgress from "../components/ProfileProgress";
 import SubscriptionsSection from "../components/SubscriptionsSection";
+import NutritionCompletionNote from "../components/NutritionCompletionNote";
 import { IconChevronRight, IconPencil, IconUserPlus, IconUsers } from "../components/Icons";
 import { useAuth } from "../context/AuthContext";
 import { useSidebarMode } from "../hooks/useSidebarMode";
@@ -262,6 +263,8 @@ export default function ProfilePage() {
       )}
 
       <EmailVerificationBanner user={user} />
+
+      <NutritionCompletionNote />
 
       {welcome && !isOwner && (
         <GlassCard className="preview-card" strong style={{ marginBottom: 20, borderColor: "var(--accent)" }}>

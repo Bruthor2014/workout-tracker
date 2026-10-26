@@ -188,12 +188,18 @@ export default function MessagesPage() {
               <div className="messages-list">
                 {loadingThread && <p className="text-secondary">A carregar...</p>}
                 {!loadingThread &&
-                  thread.map((msg) => (
-                    <div key={msg.id} className={`message-bubble${msg.sender_id === user.id ? " mine" : ""}`}>
-                      <p>{msg.body}</p>
-                      <span>{formatTimestamp(msg.created_at)}</span>
-                    </div>
-                  ))}
+                  (() => {
+                    const lastMineId = [...thread].reverse().find((m) => m.sender_id === user.id)?.id;
+                    return thread.map((msg) => (
+                      <div key={msg.id} className={`message-bubble${msg.sender_id === user.id ? " mine" : ""}`}>
+                        <p>{msg.body}</p>
+                        <span>
+                          {formatTimestamp(msg.created_at)}
+                          {msg.id === lastMineId && msg.read_at && " · Visto"}
+                        </span>
+                      </div>
+                    ));
+                  })()}
                 <div ref={bottomRef} />
               </div>
 

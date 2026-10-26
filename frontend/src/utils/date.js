@@ -24,3 +24,25 @@ export function addDays(date, days) {
   d.setDate(d.getDate() + days);
   return d;
 }
+
+// Dias de calendário desde `isoString` até hoje, inclusive (criado hoje =
+// 1). Normaliza as duas datas para meia-noite LOCAL antes de subtrair —
+// nunca dividir milissegundos crus por 86400000, isso subestima sempre que
+// menos de 24h reais se passaram mas já é outro dia de calendário (ex:
+// criado às 23h de ontem, são 00h05 de hoje: só 5 min reais mas já é o
+// 2º dia). Mesmo bug que já aconteceu no backend (getCompletionSummary).
+export function daysSince(isoString) {
+  if (!isoString) return null;
+  const start = new Date(`${toDateKey(new Date(isoString))}T00:00:00`);
+  const today = new Date(`${toDateKey(new Date())}T00:00:00`);
+  return Math.round((today - start) / 86400000) + 1;
+}
+
+// "Ativo hoje" / "Ativo há X dias" a partir de nutrition_plans.active_since
+// — usado tanto na linha fechada (NutritionPlanRow) como no cartão aberto
+// (NutritionPlanCard) do plano de nutrição.
+export function activeSinceLabel(activeSince) {
+  const days = daysSince(activeSince);
+  if (days == null) return "Plano ativo";
+  return days <= 1 ? "Ativo hoje" : `Ativo há ${days} dias`;
+}

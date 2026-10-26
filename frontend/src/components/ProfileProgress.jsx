@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import GlassCard from "./GlassCard";
 import ProgressChart from "./ProgressChart";
+import EvolutionChart from "./EvolutionChart";
+import Modal from "./Modal";
 import { IconChevronRight, IconClock, IconDumbbell, IconTrendingUp, IconTrophy, IconWeightStack } from "./Icons";
 import { apiRequest } from "../api/client";
 import { addDays, startOfWeek, toDateKey } from "../utils/date";
@@ -55,6 +57,32 @@ function weeklySeries(sessions) {
   }));
 }
 
+// Evolução de um exercício ao longo do tempo (a série mais pesada de cada
+// treino em que apareceu) — reaparece em cima do EvolutionChart já usado
+// para o peso corporal, só muda a fonte dos dados e a unidade.
+function ExerciseHistoryModal({ exercise, history, loading, error, onClose }) {
+  return (
+    <Modal onClose={onClose}>
+      <GlassCard className="preview-card" strong>
+        <h3>{exercise?.name || "Exercício"}</h3>
+        {loading && <p className="text-secondary">A carregar...</p>}
+        {error && <p className="error-text">{error}</p>}
+        {!loading && !error && history.length === 0 && (
+          <p className="text-secondary">Ainda não há séries com carga registadas para este exercício.</p>
+        )}
+        {!loading && !error && history.length > 0 && (
+          <EvolutionChart data={history.map((h) => ({ date: h.performed_at, value: h.weight }))} unit="kg" />
+        )}
+        <div className="form-actions">
+          <button type="button" className="glass-button" onClick={onClose}>
+            Fechar
+          </button>
+        </div>
+      </GlassCard>
+    </Modal>
+  );
+}
+
 // `onClick` é opcional — só o próprio utilizador a ver o seu progresso tem
 // para onde navegar/saltar a partir daqui (ver `own` em ProfileProgress);
 // a vista de staff sobre um membro (`memberId`) fica sem seta, só leitura.
@@ -90,9 +118,28 @@ export default function ProfileProgress({ memberId }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [showAllRecords, setShowAllRecords] = useState(false);
+  const [historyExercise, setHistoryExercise] = useState(null);
+  const [historyData, setHistoryData] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
   // Staff a ver o progresso de um membro (`memberId`) não tem dashboard
   // nem registo de peso próprios para onde saltar a partir daqui.
   const own = !memberId;
+
+  // Gráfico de evolução por exercício: só na vista própria por agora (o
+  // endpoint /sessions/exercise/:id/history só devolve o do próprio
+  // utilizador autenticado, não há ainda o equivalente para staff ver o de
+  // um membro).
+  function openExerciseHistory(exercise) {
+    setHistoryExercise(exercise);
+    setHistoryData([]);
+    setHistoryError("");
+    setHistoryLoading(true);
+    apiRequest(`/sessions/exercise/${exercise.id}/history`)
+      .then(setHistoryData)
+      .catch((err) => setHistoryError(err.message))
+      .finally(() => setHistoryLoading(false));
+  }
 
   function scrollToId(id) {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -233,8 +280,8 @@ export default function ProfileProgress({ memberId }) {
             {visibleRecords.map((r) => {
               const exercise = exerciseById.get(r.exercise_id);
               const { icon: Icon, color } = muscleGroupVisual(exercise?.muscle_group);
-              return (
-                <li key={r.exercise_id} className="profile-record">
+              const content = (
+                <>
                   <span className="profile-record-image" style={{ color }}>
                     {exercise?.image_url ? <img src={exercise.image_url} alt="" loading="lazy" /> : <Icon size={22} />}
                   </span>
@@ -249,6 +296,22 @@ export default function ProfileProgress({ memberId }) {
                     <strong>{fmt(r.weight, 1)} kg</strong>
                     <span>× {r.reps}</span>
                   </span>
+                </>
+              );
+              return (
+                <li key={r.exercise_id} className="profile-record">
+                  {own && exercise ? (
+                    <button
+                      type="button"
+                      className="profile-record-trigger"
+                      onClick={() => openExerciseHistory(exercise)}
+                      aria-label={`Ver evolução de ${exercise.name}`}
+                    >
+                      {content}
+                    </button>
+                  ) : (
+                    content
+                  )}
                 </li>
               );
             })}
@@ -259,6 +322,16 @@ export default function ProfileProgress({ memberId }) {
             </button>
           )}
         </GlassCard>
+      )}
+
+      {historyExercise && (
+        <ExerciseHistoryModal
+          exercise={historyExercise}
+          history={historyData}
+          loading={historyLoading}
+          error={historyError}
+          onClose={() => setHistoryExercise(null)}
+        />
       )}
     </section>
   );

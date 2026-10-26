@@ -63,9 +63,18 @@ h1, h2, h3, .stat-tile-value {
 ::-webkit-scrollbar-thumb:hover { background: rgba(var(--accent-strong-rgb), 0.5); }
 * { scrollbar-width: thin; scrollbar-color: rgba(var(--accent-strong-rgb), 0.28) transparent; }
 
+html {
+  /* Rede de segurança: nenhuma página desta app deve alguma vez precisar
+     de scroll lateral — se algum elemento algures transbordar por engano
+     (texto comprido, grelha mal dimensionada), fica cortado em vez de
+     abrir uma barra de scroll horizontal no telemóvel. */
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
+  overflow-x: hidden;
   font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   background: var(--bg-base, #07051f) var(--bg-image, url("/background.webp")) center / cover no-repeat fixed;
@@ -81,6 +90,18 @@ body {
      mas evita esse bug — troca aceitável só em ecrãs pequenos. */
   body {
     background-attachment: scroll;
+  }
+
+  /* No telemóvel a app todo dava-se um ar de barra de scroll fina (ver a
+     regra universal "*" acima) mesmo onde não fazia falta nenhuma — em
+     ecrãs de telemóvel a sério isto nunca aparece (os browsers mobile
+     escondem a barra por omissão), por isso esconde-se sempre aqui,
+     sem perder a possibilidade de deslizar. */
+  * {
+    scrollbar-width: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
   }
 }
 
@@ -217,4 +238,36 @@ a {
 /* Page entrance */
 .page-enter {
   animation: fadeUp 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Imprimir um plano de treino/nutrição (botão "Imprimir" em PlanCard.jsx /
+   NutritionPlanCard.jsx, que só chama window.print()). Truque clássico de
+   impressão parcial: esconde tudo, só a área marcada .print-area (e o que
+   está lá dentro) volta a ficar visível, reposicionada a ocupar a página —
+   assim não é preciso listar cada elemento de navegação/UI a esconder, nem
+   isto quebra se a navegação mudar no futuro. Fundo/texto a preto-no-
+   branco porque o tema escuro da app gastava tinta e ficava ilegível em
+   papel. Os próprios botões de ação (Imprimir/Editar/Eliminar/Marcar como
+   feita) ficam de fora — não fazem sentido num papel impresso. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: #fff !important;
+    color: #000 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  .print-area button {
+    display: none !important;
+  }
 }

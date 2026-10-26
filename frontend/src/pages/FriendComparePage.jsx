@@ -2,67 +2,57 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import GlassCard from "../components/GlassCard";
 import ProgressChart from "../components/ProgressChart";
-import { IconDumbbell, IconFlame } from "../components/Icons";
 import { apiRequest, resolveAssetUrl } from "../api/client";
 import { ROLE_LABELS } from "../utils/roles";
 
-const PERIODS = [
-  { value: 7, label: "7 dias" },
-  { value: 30, label: "30 dias" },
-  { value: 90, label: "90 dias" },
-];
+// Cor fixa por PESSOA (não por métrica) — o verde do tema é sempre "tu", o
+// azul é sempre a outra pessoa, em todos os gráficos da comparação.
+const MINE_COLOR = "var(--accent)";
+const FRIEND_COLOR = "#3b82f6";
 
-// Mesmas cores do perfil (ProfileProgress) para a série principal; a do
-// amigo é sempre a mesma cor neutra tracejada, para nunca se confundir com
-// o tema do ginásio de ninguém.
-const HOURS_COLOR = "var(--accent-strong)";
-const VOLUME_COLOR = "#0d9488";
-const FRIEND_COLOR = "#94a3b8";
+// Mesmos períodos do separador "Ranking" em FriendsPage.jsx — a
+// granularidade dos gráficos muda com o período (ver buildBuckets no
+// backend): um ponto por dia na semana, por semana no mês, por mês no ano.
+const PERIODS = [
+  { value: "week", label: "Semana", caption: "Esta semana, por dia" },
+  { value: "month", label: "Mês", caption: "Este mês, por semana" },
+  { value: "year", label: "Ano", caption: "Este ano, por mês" },
+];
 
 const fmt = (n, digits = 0) => Number(n).toLocaleString("pt-PT", { maximumFractionDigits: digits });
 
-function CompareRow({ icon: Icon, label, meValue, friendValue, unit }) {
-  const meNum = Number(meValue) || 0;
-  const friendNum = Number(friendValue) || 0;
-  const total = meNum + friendNum;
-  const mePct = total > 0 ? (meNum / total) * 100 : 50;
-
+function WeeklyChart({ title, caption, points, points2, formatValue }) {
   return (
-    <div className="compare-row">
-      <div className="compare-row-label">
-        <Icon size={18} />
-        <span>{label}</span>
-      </div>
-      <div className="compare-row-values">
-        <span className="compare-value mine">
-          {meValue} {unit}
-        </span>
-        <span className="compare-value theirs">
-          {friendValue} {unit}
-        </span>
-      </div>
-      <div className="compare-bar">
-        <div className="compare-bar-mine" style={{ width: `${mePct}%` }} />
-        <div className="compare-bar-theirs" style={{ width: `${100 - mePct}%` }} />
-      </div>
-    </div>
+    <GlassCard className="profile-chart-card" strong>
+      <h3>{title}</h3>
+      <p className="text-secondary">{caption}</p>
+      <ProgressChart
+        kind="line"
+        color={MINE_COLOR}
+        points={points}
+        color2={FRIEND_COLOR}
+        points2={points2}
+        formatValue={formatValue}
+        ariaLabel={title}
+      />
+    </GlassCard>
   );
 }
 
 export default function FriendComparePage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [days, setDays] = useState(30);
+  const [period, setPeriod] = useState("month");
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [unfollowing, setUnfollowing] = useState(false);
 
   useEffect(() => {
     setData(null);
-    apiRequest(`/friends/${id}/compare?days=${days}`)
+    apiRequest(`/friends/${id}/compare?period=${period}`)
       .then(setData)
       .catch((err) => setError(err.message));
-  }, [id, days]);
+  }, [id, period]);
 
   async function handleUnfollow() {
     if (!window.confirm("Deixar de seguir esta pessoa? Deixas de ver o resumo dela.")) return;
@@ -81,11 +71,14 @@ export default function FriendComparePage() {
 
   const { me, friend } = data;
   const avatarUrl = resolveAssetUrl(friend.user.avatar_url);
+  const caption = PERIODS.find((p) => p.value === period)?.caption ?? "";
 
-  const hoursPoints = me.weekly.map((w) => ({ label: w.label, tooltipLabel: `Semana de ${w.label}`, value: w.hours }));
-  const hoursPoints2 = friend.weekly.map((w) => ({ label: w.label, tooltipLabel: `Semana de ${w.label}`, value: w.hours }));
-  const volumePoints = me.weekly.map((w) => ({ label: w.label, tooltipLabel: `Semana de ${w.label}`, value: w.volume }));
-  const volumePoints2 = friend.weekly.map((w) => ({ label: w.label, tooltipLabel: `Semana de ${w.label}`, value: w.volume }));
+  const seriesPoints = (series, key) =>
+    series.map((pt) => ({ label: pt.label, tooltipLabel: pt.label, value: pt[key] }));
+  const nutritionPoints = (series) =>
+    series.map((pt) => ({ label: pt.label, tooltipLabel: pt.label, value: pt.percentage ?? 0 }));
+
+  const hasNutrition = me.nutrition.some((w) => w.percentage != null) || friend.nutrition.some((w) => w.percentage != null);
 
   return (
     <div className="page-container">
@@ -113,53 +106,52 @@ export default function FriendComparePage() {
           <button
             key={p.value}
             type="button"
-            className={`team-chip${days === p.value ? " active" : ""}`}
-            onClick={() => setDays(p.value)}
+            className={`team-chip${period === p.value ? " active" : ""}`}
+            onClick={() => setPeriod(p.value)}
           >
             {p.label}
           </button>
         ))}
       </div>
 
-      <GlassCard className="friend-compare-card" strong>
-        <div className="compare-legend">
-          <span className="compare-legend-item mine">Tu</span>
-          <span className="compare-legend-item theirs dashed">{friend.user.name}</span>
-        </div>
+      {/* Nomes diretos, cor igual à linha do gráfico — para nunca haver
+          dúvida de qual é qual, sem depender de ler um quadradinho pequeno. */}
+      <div className="compare-legend">
+        <span className="compare-legend-item mine">Tu</span>
+        <span className="compare-legend-item theirs">{friend.user.name}</span>
+      </div>
 
-        <CompareRow icon={IconDumbbell} label="Treinos" meValue={me.stats.sessions_count} friendValue={friend.stats.sessions_count} unit="" />
-        <CompareRow icon={IconFlame} label="Streak atual" meValue={me.stats.streak_days} friendValue={friend.stats.streak_days} unit={me.stats.streak_days === 1 ? "dia" : "dias"} />
-      </GlassCard>
-
-      {/* Os mesmos gráficos do perfil (ProfileProgress) — a tua série com o
-          estilo normal, a do amigo sempre tracejada por cima. */}
       <div className="profile-charts">
-        <GlassCard className="profile-chart-card" strong>
-          <h3>Horas de treino por semana</h3>
-          <p className="text-secondary">Últimas 12 semanas</p>
-          <ProgressChart
-            kind="bar"
-            color={HOURS_COLOR}
-            points={hoursPoints}
-            color2={FRIEND_COLOR}
-            points2={hoursPoints2}
-            formatValue={(v, axis) => (axis ? `${fmt(v, 1)}h` : `${fmt(v, 1)} h`)}
-            ariaLabel="Horas de treino por semana"
+        <WeeklyChart
+          title="Treinos"
+          caption={caption}
+          points={seriesPoints(me.training, "sessions")}
+          points2={seriesPoints(friend.training, "sessions")}
+          formatValue={(v, axis) => (axis ? fmt(v) : `${fmt(v)} ${v === 1 ? "treino" : "treinos"}`)}
+        />
+        <WeeklyChart
+          title="Horas"
+          caption={caption}
+          points={seriesPoints(me.training, "hours")}
+          points2={seriesPoints(friend.training, "hours")}
+          formatValue={(v, axis) => (axis ? `${fmt(v, 1)}h` : `${fmt(v, 1)} h`)}
+        />
+        <WeeklyChart
+          title="Volume"
+          caption={caption}
+          points={seriesPoints(me.training, "volume")}
+          points2={seriesPoints(friend.training, "volume")}
+          formatValue={(v, axis) => (axis ? (v >= 1000 ? `${fmt(v / 1000, 1)}k` : fmt(v)) : `${fmt(v)} kg`)}
+        />
+        {hasNutrition && (
+          <WeeklyChart
+            title="Nutrição"
+            caption={caption}
+            points={nutritionPoints(me.nutrition)}
+            points2={nutritionPoints(friend.nutrition)}
+            formatValue={(v) => `${fmt(v)}%`}
           />
-        </GlassCard>
-        <GlassCard className="profile-chart-card" strong>
-          <h3>Volume levantado por semana</h3>
-          <p className="text-secondary">Reps × carga, últimas 12 semanas</p>
-          <ProgressChart
-            kind="line"
-            color={VOLUME_COLOR}
-            points={volumePoints}
-            color2={FRIEND_COLOR}
-            points2={volumePoints2}
-            formatValue={(v, axis) => (axis ? (v >= 1000 ? `${fmt(v / 1000, 1)}k` : fmt(v)) : `${fmt(v)} kg`)}
-            ariaLabel="Volume levantado por semana"
-          />
-        </GlassCard>
+        )}
       </div>
     </div>
   );

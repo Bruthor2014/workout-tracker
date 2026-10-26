@@ -7,6 +7,7 @@ const {
   updateSession,
   deleteSession,
   listRecords,
+  listExerciseHistory,
   listSessionsForMember,
   listRecordsForMember,
 } = require("../controllers/sessionController");
@@ -19,6 +20,7 @@ const STAFF = requireRole("gym_owner", "personal_trainer", "nutritionist", "rece
 router.get("/", requireAuth, notOwner, listSessions);
 // Antes de "/:id", senão "records" seria lido como um id.
 router.get("/records", requireAuth, notOwner, listRecords);
+router.get("/exercise/:exerciseId/history", requireAuth, notOwner, listExerciseHistory);
 router.get("/member/:id", requireAuth, STAFF, listSessionsForMember);
 router.get("/member/:id/records", requireAuth, STAFF, listRecordsForMember);
 router.get("/:id", requireAuth, getSession);

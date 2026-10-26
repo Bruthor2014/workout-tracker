@@ -198,6 +198,34 @@ async function listRecords(req, res) {
   res.json(await queryRecords(req.user.id, Number(req.query.exclude_session) || null));
 }
 
+// GET /api/sessions/exercise/:exerciseId/history — evolução de um exercício
+// ao longo do tempo: a série mais pesada de cada treino em que apareceu
+// (com peso igual, a de mais reps), por ordem cronológica — para um
+// gráfico tipo EvolutionChart.jsx. Cardio fica de fora (reps/carga ali são
+// minutos/km, não dá para comparar progressão da mesma forma).
+async function listExerciseHistory(req, res) {
+  const exerciseId = Number(req.params.exerciseId);
+  if (!Number.isInteger(exerciseId)) {
+    return res.status(400).json({ message: "Exercício inválido." });
+  }
+  const result = await pool.query(
+    `SELECT performed_at, weight, reps FROM (
+       SELECT DISTINCT ON (sl.session_id)
+              ws.performed_at::date AS performed_at,
+              sl.weight::float AS weight,
+              sl.reps
+         FROM set_logs sl
+         JOIN workout_sessions ws ON ws.id = sl.session_id
+        WHERE ws.user_id = $1 AND sl.exercise_id = $2
+          AND sl.weight IS NOT NULL AND sl.weight > 0
+        ORDER BY sl.session_id, sl.weight DESC, sl.reps DESC
+     ) best
+     ORDER BY performed_at ASC`,
+    [req.user.id, exerciseId]
+  );
+  res.json(result.rows);
+}
+
 // O staff só vê pessoas do seu próprio ginásio.
 async function memberInStaffGym(req, res) {
   const result = await pool.query(`SELECT id FROM users WHERE id = $1 AND gym_id = $2 AND role <> 'admin'`, [
@@ -246,6 +274,7 @@ module.exports = {
   updateSession,
   deleteSession,
   listRecords,
+  listExerciseHistory,
   listSessionsForMember,
   listRecordsForMember,
 };

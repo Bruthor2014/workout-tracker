@@ -88,6 +88,13 @@ export default function GoogleSignInButton({ onAuthenticated, onError }) {
         // usa para saber se já há sessão. itp_support avisa a biblioteca
         // para usar um caminho compatível com essa proteção.
         itp_support: true,
+        // Sem isto, em quem já tem sessão Google aberta no browser, o
+        // botão troca sozinho para "Continuar como <Nome>" com a foto da
+        // conta (o FedCM do browser mostra-a por cima do nosso texto) —
+        // queríamos sempre o botão genérico "Continuar com o Google".
+        use_fedcm_for_button: false,
+        auto_select: false,
+        cancel_on_tap_outside: true,
       });
       // A API só aceita uma largura fixa em píxeis (não "100%"), por isso
       // mede-se o espaço real do cartão para o botão ficar com a mesma

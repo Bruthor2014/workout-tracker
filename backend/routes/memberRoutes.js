@@ -15,6 +15,8 @@ const {
   getMemberSubscriptions,
   getMySubscriptions,
   updateMemberSubscription,
+  setPriceOverride,
+  clearPriceOverride,
 } = require("../controllers/subscriptionController");
 
 const router = express.Router();
@@ -39,6 +41,8 @@ router.delete("/:id/team", requireAuth, requireRole("gym_owner"), removeFromTeam
 router.get("/:id", requireAuth, STAFF, getMember);
 router.get("/:id/subscriptions", requireAuth, STAFF, getMemberSubscriptions);
 router.put("/:id/subscriptions/:serviceType", requireAuth, SUBSCRIPTION_MANAGERS, updateMemberSubscription);
+router.put("/:id/subscriptions/:serviceType/price", requireAuth, SUBSCRIPTION_MANAGERS, setPriceOverride);
+router.delete("/:id/subscriptions/:serviceType/price", requireAuth, SUBSCRIPTION_MANAGERS, clearPriceOverride);
 router.put("/:id/password", requireAuth, PASSWORD_MANAGERS, resetMemberPassword);
 router.put("/:id/role", requireAuth, ROLE_MANAGERS, updateMemberRole);
 

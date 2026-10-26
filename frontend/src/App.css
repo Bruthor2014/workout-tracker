@@ -391,6 +391,31 @@
     color: var(--accent);
   }
 
+  /* Voltar à página anterior — sempre visível, qualquer ecrã (ver
+     MobileTopBar.jsx). */
+  .mobile-top-bar-back {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .mobile-top-bar-back:hover {
+    color: var(--text-primary);
+  }
+
+  .mobile-top-bar-back-icon {
+    display: inline-flex;
+    transform: rotate(180deg);
+  }
+
   .mobile-top-bar-actions {
     display: flex;
     align-items: center;
@@ -800,6 +825,13 @@
   padding: 20px;
   z-index: 100;
   animation: fadeUp 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* Bug conhecido do Safari (sobretudo iOS): conteúdo dinâmico dentro de um
+     elemento com backdrop-filter + animation às vezes não chega a pintar
+     até haver uma interação (toque/scroll) que force um repaint — ficava
+     tudo invisível mas já clicável. Forçar a própria camada de composição
+     evita isto. */
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
 }
 
 .modal-content {
@@ -1375,8 +1407,8 @@
 }
 
 .workout-row-delete {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1533,6 +1565,10 @@
   padding: 2px 6px 2px 2px;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  /* Mesmo motivo do .modal-backdrop: é esta grelha, dentro do backdrop-filter
+     do modal, que ficava em branco até se tocar nela no Safari/iOS. */
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
 }
 
 .exercise-picker-empty {
@@ -2168,21 +2204,30 @@
   50% { opacity: 0.3; }
 }
 
-.meal-item-row-header {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr auto;
-  gap: 10px;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
-}
-
 .meal-item-row {
   display: grid;
   grid-template-columns: 1.4fr 1fr auto;
   gap: 10px;
-  align-items: center;
+  align-items: start;
   margin-bottom: 8px;
+}
+
+/* Rótulo sempre visível por cima de cada campo (em vez de um cabeçalho de
+   coluna só, que em ecrãs estreitos ficava escondido e não dava para saber
+   o que pôr em cada caixa — mesmo padrão usado nas séries dos planos de
+   treino). */
+.meal-item-field-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.meal-item-qty {
+  min-width: 0;
 }
 
 .feature-icon {
@@ -2970,6 +3015,26 @@
   gap: 14px;
 }
 
+/* Técnica em linha com o exercício (registo de treino) — versão compacta
+   do seletor, sem o rótulo "Técnica" ao lado (ver .log-type-select, usado
+   no editor do plano, onde continua numa linha própria com o recorde). */
+.log-type-select-inline {
+  width: auto;
+  min-width: 0;
+}
+
+.log-type-select-inline .ui-select-trigger {
+  width: auto;
+  padding: 8px 10px;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.log-exercise.typed .log-type-select-inline .ui-select-trigger {
+  border-color: var(--type-color);
+  color: color-mix(in srgb, var(--type-color) 45%, white);
+}
+
 .log-exercise-sets {
   margin: 14px 0 0 54px;
 }
@@ -3198,12 +3263,40 @@
   }
   .log-exercise-sets-head,
   .log-exercise-set {
-    grid-template-columns: 34px minmax(0, 1fr) minmax(0, 1fr) 34px 28px;
+    /* 1.ª coluna mais larga que no desktop proporcionalmente — sem isto
+       "Série" não cabia e transbordava para cima de "Reps", desalinhando
+       o cabeçalho da linha de dados por baixo. */
+    grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr) 34px 32px;
     gap: 6px;
+  }
+  .log-exercise-sets-head span:first-child {
+    white-space: normal;
+  }
+  .log-exercise-set .glass-input {
+    padding: 9px 8px;
+    font-size: 0.85rem;
   }
   .log-exercise-meta,
   .log-type-hint {
     margin-left: 0;
+  }
+  /* Sem isto, o seletor da técnica ("Normal") fica tão largo/pesado quanto
+     o cartão inteiro — desproporcional à linha de séries logo a seguir,
+     que é bem mais compacta. Encolhe ao conteúdo em vez de esticar. */
+  .log-type-select .ui-select {
+    min-width: 0;
+    width: auto;
+  }
+  .log-type-select .ui-select-trigger {
+    width: auto;
+    padding: 6px 10px;
+    font-size: 0.82rem;
+  }
+  /* Mesma ideia, mas para a versão em linha com o exercício (sem rótulo). */
+  .log-type-select-inline .ui-select-trigger {
+    padding: 6px 8px;
+    font-size: 0.78rem;
+    gap: 5px;
   }
   .log-actions .glass-button {
     flex: 1;
@@ -3212,9 +3305,14 @@
 
 /* --- Alimentos nos planos de nutrição (foto + pesquisa Open Food Facts) --- */
 
-.meal-item-row-header,
 .meal-item-row {
   grid-template-columns: 48px minmax(0, 1.6fr) minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.meal-item-row .nf-icon-danger,
+.meal-item-row .food-photo-button {
+  margin-top: 20px;
 }
 
 .food-photo-button {
@@ -3223,9 +3321,9 @@
   height: 46px;
   padding: 0;
   border-radius: 6px;
-  border: 1.5px dashed rgba(var(--accent-rgb), 0.45);
-  background: rgba(var(--accent-strong-rgb), 0.08);
-  color: var(--accent-light);
+  border: 1px solid var(--glass-border);
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3259,25 +3357,33 @@
   min-width: 0;
 }
 
+/* Campo + botão de pesquisa lado a lado em flex normal, não um por cima do
+   outro com posicionamento absoluto — isso dependia do padding do campo
+   bater certo com a largura do botão, e nomes compridos passavam por
+   baixo. Em flex, o campo encolhe (flex:1 + min-width:0) e nunca o botão
+   deixa de ter o seu espaço. */
 .meal-item-name-input {
-  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .meal-item-name-input .glass-input {
-  padding-right: 46px;
+  flex: 1;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .meal-item-search {
-  position: absolute;
-  right: 6px;
-  top: 50%;
-  transform: translateY(-50%);
+  flex-shrink: 0;
   width: 34px;
   height: 34px;
   border-radius: 4px;
   border: 1px solid rgba(var(--accent-rgb), 0.35);
-  background: rgba(var(--accent-strong-rgb), 0.18);
-  color: #ddd6fe;
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3285,7 +3391,7 @@
 }
 
 .meal-item-search:hover {
-  background: rgba(var(--accent-strong-rgb), 0.32);
+  background: rgba(var(--accent-rgb), 0.24);
 }
 
 .meal-item-meta {
@@ -3351,8 +3457,13 @@
   flex-direction: column;
   gap: 8px;
   padding-right: 4px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  /* Sem barra visível — continua a dar para deslizar (scroll), só não
+     mostra a faixa/thumb ao lado da lista. */
+  scrollbar-width: none;
+}
+
+.food-search-results::-webkit-scrollbar {
+  display: none;
 }
 
 .food-search-hint {
@@ -3436,6 +3547,7 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 2px;
+  min-width: 0;
   font-size: 0.78rem;
   color: var(--text-secondary);
   white-space: nowrap;
@@ -3478,15 +3590,40 @@
   .food-result-nutrition {
     grid-column: 2;
     align-items: flex-start;
+    min-width: 0;
+    width: 100%;
+    /* Sem isto a linha "P 73,3 g · H 8 g · G 5,7 g" não cabia num ecrã
+       estreito e empurrava o cartão (e a modal toda) para o lado — era a
+       causa do scroll lateral na pesquisa. */
+    white-space: normal;
   }
-  .meal-item-row-header {
-    display: none;
-  }
+  /* Áreas nomeadas em vez de depender da ordem automática da grelha — essa
+     dependia de onde o cursor de auto-colocação ficava depois de cada
+     célula explícita, e ficava diferente consoante a altura do nome do
+     elemento (com o rótulo "Elemento" por cima), o que desalinhava o
+     lixo e a quantidade. Isto é sempre igual, independente da altura. */
   .meal-item-row {
-    grid-template-columns: 46px minmax(0, 1fr) auto;
+    grid-template-columns: 46px minmax(0, 1fr) 40px;
+    grid-template-areas:
+      "photo elemento elemento"
+      "qty   qty       trash";
+    row-gap: 8px;
+    align-items: start;
   }
-  .meal-item-row > .glass-input {
-    grid-column: 2;
+  .meal-item-row .food-photo-button {
+    grid-area: photo;
+    margin-top: 0;
+  }
+  .meal-item-row .meal-item-name {
+    grid-area: elemento;
+  }
+  .meal-item-qty {
+    grid-area: qty;
+  }
+  .meal-item-row .nf-icon-danger {
+    grid-area: trash;
+    margin-top: 0;
+    justify-self: end;
   }
 }
 
@@ -3671,7 +3808,6 @@
   border: 1px solid rgba(var(--accent-rgb), 0.45);
 }
 
-.nf-option .meal-item-row-header,
 .nf-option .meal-item-row {
   grid-template-columns: 48px minmax(0, 1.5fr) minmax(0, 1fr) 40px;
   gap: 10px;
@@ -3711,6 +3847,111 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+/* Linha fechada de um plano de nutrição (ver NutritionPlanRow.jsx) — só
+   abre os detalhes ao clicar, em vez de mostrar tudo logo de início. */
+.nplan-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: rgba(var(--surface-rgb), 0.3);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+/* A linha a ser arrastada no momento (ver NutritionPage.jsx) — destaca-se
+   das outras para ficar claro qual está a mover. */
+.nplan-row.dragging {
+  border-color: var(--accent);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  z-index: 1;
+  position: relative;
+}
+
+/* Pega para arrastar — funciona a rato e a toque (Pointer Events, ver
+   handlePointerDown/Move/Up em NutritionPage.jsx). "touch-action: none" é
+   essencial no telemóvel: sem isto, o próprio browser tentava fazer scroll
+   da página ao mesmo tempo que se arrastava a linha. */
+.nplan-row-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  align-self: stretch;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: grab;
+  touch-action: none;
+}
+
+.nplan-row.dragging .nplan-row-handle {
+  cursor: grabbing;
+  color: var(--accent);
+}
+
+.nplan-row-handle:hover {
+  color: var(--text-primary);
+}
+
+.nplan-row-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px 16px 10px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.nplan-row-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nplan-row-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 1.05rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nplan-row-meta {
+  font-size: 0.82rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Versão mais pequena do selo "Ativo" para caber na linha fechada da
+   lista (NutritionPlanRow), ao lado da contagem de refeições/alimentos —
+   fora de .nplan-row-name de propósito, que tem nowrap+ellipsis e cortava
+   o selo junto a nomes de plano compridos. */
+.nplan-row-active {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  flex-shrink: 0;
+}
+
+.nplan-row-chevron {
+  flex-shrink: 0;
+  color: var(--text-secondary);
 }
 
 .nplan {
@@ -3756,6 +3997,38 @@
   font-size: 0.92rem;
 }
 
+/* Nota "X/Y refeições cumpridas este mês" — Dashboard e Perfil (ver
+   NutritionCompletionNote.jsx). */
+.nutrition-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 20px;
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+  background: rgba(var(--surface-rgb), 0.3);
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.nutrition-note strong {
+  color: var(--text-primary);
+}
+
+.nutrition-note-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.4);
+}
+
 .nplan-stats {
   display: flex;
   flex-wrap: wrap;
@@ -3770,6 +4043,37 @@
   color: var(--accent-light);
   background: rgba(var(--accent-strong-rgb), 0.14);
   border: 1px solid rgba(var(--accent-rgb), 0.25);
+}
+
+/* Qual plano de nutrição conta para a estatística de refeições cumpridas
+   (ver NutritionCompletionNote.jsx) — só faz sentido escolher com mais do
+   que um plano. */
+.nplan-stat-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 3px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #0a0b0c;
+  background: var(--accent);
+}
+
+.nplan-stat-set-active {
+  padding: 3px 10px;
+  border-radius: 3px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+}
+
+.nplan-stat-set-active:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
 }
 
 .nplan-actions {
@@ -3807,6 +4111,16 @@
   background: rgba(244, 63, 94, 0.2);
 }
 
+.nplan-action.done {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #0a0b0c;
+}
+
+.nplan-action.done:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
 .nplan-meals {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
@@ -3822,6 +4136,14 @@
   border: 1px solid var(--glass-border);
   border-top: 3px solid var(--meal-color);
   background: rgba(var(--surface-rgb), 0.3);
+}
+
+/* Refeição já marcada como feita hoje (ver trackCompletion em
+   NutritionPlanCard.jsx) — verde transparente sobre o cartão todo, em vez
+   de só o botão mudar. */
+.nplan-meal.completed {
+  background: rgba(var(--accent-rgb), 0.1);
+  border-color: rgba(var(--accent-rgb), 0.45);
 }
 
 .nplan-meal-header {
@@ -3975,14 +4297,28 @@
     gap: 0;
     margin-left: 0;
   }
-  .nf-option .meal-item-row-header {
-    display: none;
-  }
   .nf-option .meal-item-row {
     grid-template-columns: 46px minmax(0, 1fr) 40px;
+    grid-template-areas:
+      "photo elemento elemento"
+      "qty   qty       trash";
+    row-gap: 8px;
+    align-items: start;
   }
-  .nf-option .meal-item-row > .glass-input {
-    grid-column: 2;
+  .nf-option .meal-item-row .food-photo-button {
+    grid-area: photo;
+    margin-top: 0;
+  }
+  .nf-option .meal-item-row .meal-item-name {
+    grid-area: elemento;
+  }
+  .nf-option .meal-item-row .meal-item-qty {
+    grid-area: qty;
+  }
+  .nf-option .meal-item-row .nf-icon-danger {
+    grid-area: trash;
+    margin-top: 0;
+    justify-self: end;
   }
   .nplan {
     padding: 18px 16px;
@@ -3995,6 +4331,17 @@
   }
   .nplan-meals {
     grid-template-columns: 1fr;
+  }
+  .nplan-row-open {
+    gap: 10px;
+    padding: 12px 12px 12px 6px;
+  }
+  .nplan-row .nplan-icon {
+    width: 40px;
+    height: 40px;
+  }
+  .nplan-row-name {
+    font-size: 0.95rem;
   }
 }
 
@@ -4523,7 +4870,6 @@
   flex-shrink: 0;
   border-radius: 50%;
   background: var(--option-color, var(--accent));
-  box-shadow: 0 0 8px var(--option-color, var(--accent));
 }
 
 /* Popover (lista / calendário): vidro escuro, por cima de tudo. */
@@ -4535,7 +4881,7 @@
   border-radius: 6px;
   border: 1px solid rgba(var(--accent-rgb), 0.35);
   background: rgb(var(--surface-rgb));
-  box-shadow: 0 18px 40px rgba(2, 4, 20, 0.65), 0 0 0 1px rgba(var(--accent-strong-rgb), 0.12);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
   animation: ui-popover-in 0.12s ease-out;
 }
 
@@ -4583,7 +4929,7 @@
 
 .ui-select-option.selected .ui-select-option-label {
   font-weight: 700;
-  color: #ede9fe;
+  color: var(--accent);
 }
 
 .ui-select-option-text {
@@ -4826,15 +5172,31 @@
   stroke-width: 1;
 }
 
-/* Segunda série (comparação com um amigo): sempre tracejada, por cima da
-   série principal — ver ProgressChart.jsx (prop points2/color2). */
+/* Segunda série (comparação com um amigo) — exatamente a mesma forma que a
+   principal (barra com barra, linha com linha), só muda a cor
+   (var(--series2)) — ver ProgressChart.jsx (prop points2/color2). Já não é
+   tracejada de propósito: parecia um gráfico diferente por cima do outro
+   em vez de uma comparação direta. */
+.pc-bar2 {
+  fill: var(--series2);
+  transition: opacity 0.12s ease;
+}
+
+.progress-chart-box:hover .pc-bar2:not(.active) {
+  opacity: 0.55;
+}
+
 .pc-line2 {
   fill: none;
   stroke: var(--series2);
   stroke-width: 2;
-  stroke-dasharray: 5 4;
   stroke-linejoin: round;
   stroke-linecap: round;
+}
+
+.pc-area2 {
+  fill: var(--series2);
+  opacity: 0.1;
 }
 
 .pc-dot2 {
@@ -4842,14 +5204,6 @@
   stroke: rgb(var(--surface-rgb));
   stroke-width: 2;
   transition: r 0.12s ease;
-}
-
-.pc-tooltip-key-dashed {
-  width: 12px;
-  height: 0;
-  border-radius: 0;
-  border-top: 2px dashed currentColor;
-  background: none;
 }
 
 .pc-tooltip {
@@ -4994,6 +5348,34 @@
 .profile-record-value strong {
   font-size: 1rem;
   color: #fde68a;
+}
+
+/* Botão que envolve o conteúdo do recorde (só quando clicável — vista
+   própria): replica o layout do .profile-record em vez de o `<li>` em
+   si, para não duplicar padding/borda/fundo que já estão no `<li>`. */
+.profile-record-trigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.profile-record-trigger:hover .profile-record-name {
+  color: var(--accent-light);
+}
+
+.profile-record-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 @media (max-width: 1100px) {
@@ -6510,6 +6892,113 @@ button.tt-item.busy:hover {
   background: rgba(255, 255, 255, 0.05);
 }
 
+/* Separador "Ranking" em FriendsPage.jsx — duas listas (treino/nutrição),
+   cada uma um <ol> para a posição vir de graça do número da lista. */
+.ranking-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ranking-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+
+.ranking-row-me {
+  background: rgba(var(--accent-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
+}
+
+.ranking-row-position {
+  width: 26px;
+  flex-shrink: 0;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.ranking-row-avatar {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.ranking-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.ranking-row-metric {
+  flex-shrink: 0;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--accent-light);
+}
+
+/* Ícone de informação clicável (InfoTooltip.jsx) — substitui texto
+   explicativo sempre visível por uma caixa curta só quando pedida. */
+.info-tooltip {
+  position: relative;
+  display: inline-flex;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.info-tooltip-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.info-tooltip-trigger:hover,
+.info-tooltip-trigger[aria-expanded="true"] {
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
+.info-tooltip-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 299;
+}
+
+.info-tooltip-box {
+  position: absolute;
+  z-index: 300;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 220px;
+  max-width: calc(100vw - 48px);
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+  background: rgb(var(--surface-strong-rgb));
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
 .friend-row-identity {
   display: flex;
   align-items: center;
@@ -6607,9 +7096,8 @@ button.tt-item.busy:hover {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-size: 0.86rem;
+  font-weight: 700;
 }
 
 .compare-legend-item::before {
@@ -6619,62 +7107,22 @@ button.tt-item.busy:hover {
   border-radius: 3px;
 }
 
+/* Texto na mesma cor do quadradinho (e da linha do gráfico) — não só o
+   quadradinho, para "Tu" e o nome do amigo nunca se lerem parecidos. */
+.compare-legend-item.mine {
+  color: var(--accent);
+}
+
+.compare-legend-item.theirs {
+  color: #3b82f6;
+}
+
 .compare-legend-item.mine::before {
   background: var(--accent);
 }
 
 .compare-legend-item.theirs::before {
-  background: #64748b;
-}
-
-.compare-legend-item.dashed::before {
-  width: 14px;
-  height: 0;
-  border-radius: 0;
-  border-top: 2px dashed #94a3b8;
-  background: none;
-}
-
-.compare-row-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  color: var(--text-secondary);
-  font-size: 0.86rem;
-  font-weight: 600;
-}
-
-.compare-row-values {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 6px;
-  font-size: 1.1rem;
-  font-weight: 700;
-}
-
-.compare-value.mine {
-  color: var(--accent-light);
-}
-
-.compare-value.theirs {
-  color: #94a3b8;
-}
-
-.compare-bar {
-  display: flex;
-  height: 8px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.compare-bar-mine {
-  background: var(--accent);
-}
-
-.compare-bar-theirs {
-  background: #64748b;
+  background: #3b82f6;
 }
 
 /* Blocos "Seguidores" / "A seguir" do perfil — ver FriendStatBlock em

@@ -11,6 +11,7 @@ const {
   getCounts,
   getSummary,
   getCompare,
+  getRanking,
 } = require("../controllers/friendController");
 
 const router = express.Router();
@@ -26,6 +27,7 @@ router.delete("/following/:id", requireAuth, notOwner, unfollow);
 router.get("/following", requireAuth, notOwner, listFollowing);
 router.get("/followers", requireAuth, notOwner, listFollowers);
 router.get("/counts", requireAuth, notOwner, getCounts);
+router.get("/ranking", requireAuth, notOwner, getRanking);
 router.get("/:id/summary", requireAuth, notOwner, getSummary);
 router.get("/:id/compare", requireAuth, notOwner, getCompare);
 

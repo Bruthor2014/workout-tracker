@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import GlassCard from "../components/GlassCard";
 import NewPlanForm from "../components/NewPlanForm";
 import PlanCard from "../components/PlanCard";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { useBackButtonOverride } from "../context/BackOverrideContext";
 import { IconCalendar } from "../components/Icons";
 
 const PLAN_EXAMPLE = [
@@ -60,6 +61,11 @@ function PlansAuthedView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
+
+  useBackButtonOverride(
+    showForm,
+    useCallback(() => setShowForm(false), [])
+  );
 
   function loadPlans() {
     setLoading(true);

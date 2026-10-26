@@ -8,6 +8,11 @@ const {
   updatePlan,
   updateMeal,
   deletePlan,
+  listCompletions,
+  setCompletion,
+  getCompletionSummary,
+  setActivePlan,
+  reorderPlans,
 } = require("../controllers/nutritionController");
 
 const router = express.Router();
@@ -20,11 +25,17 @@ const CREATORS = requireRole("nutritionist");
 const NOT_OWNER = requireRole("member", "personal_trainer", "nutritionist", "receptionist", "intern", "dono", "gym_owner");
 
 router.get("/", requireAuth, NOT_OWNER, listPlans);
+router.get("/completion-summary", requireAuth, NOT_OWNER, getCompletionSummary);
+// Antes de "/:id", senão "reorder" seria lido como um id.
+router.put("/reorder", requireAuth, NOT_OWNER, reorderPlans);
 router.post("/", requireAuth, NOT_OWNER, createPlan);
 router.get("/member/:id", requireAuth, STAFF, listPlansForMember);
 router.post("/member/:id", requireAuth, CREATORS, createPlanForMember);
 router.put("/:id", requireAuth, updatePlan);
 router.put("/:id/meals/:mealId", requireAuth, updateMeal);
+router.get("/:id/completions", requireAuth, listCompletions);
+router.put("/:id/meals/:mealId/completion", requireAuth, setCompletion);
+router.put("/:id/active", requireAuth, setActivePlan);
 router.delete("/:id", requireAuth, deletePlan);
 
 module.exports = router;

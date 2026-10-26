@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import GlassCard from "../components/GlassCard";
 import WeekCalendar from "../components/WeekCalendar";
 import WeeklyComparison from "../components/WeeklyComparison";
+import NutritionCompletionNote from "../components/NutritionCompletionNote";
 import {
   IconDumbbell,
   IconChevronRight,
@@ -46,6 +47,7 @@ function formatDuration(startedAt, endedAt) {
 // baixo, só os treinos do dia escolhido (por omissão hoje). As setas do
 // calendário mudam de semana; clicar num dia mostra os treinos desse dia.
 export default function DashboardPage() {
+  const navigate = useNavigate();
   const todayKey = toDateKey(new Date());
   const currentWeekStart = startOfWeek(new Date());
   const [weekStart, setWeekStart] = useState(currentWeekStart);
@@ -86,7 +88,7 @@ export default function DashboardPage() {
   }
 
   async function handleDelete(e, sessionId) {
-    e.preventDefault(); // não seguir o <Link> do cartão para /log/:id
+    e.preventDefault();
     e.stopPropagation();
 
     if (!window.confirm("Eliminar este treino?")) return;
@@ -125,6 +127,8 @@ export default function DashboardPage() {
         </Link>
       </div>
 
+      <NutritionCompletionNote />
+
       <WeekCalendar
         weekStart={weekStart}
         selectedKey={selectedKey}
@@ -134,7 +138,7 @@ export default function DashboardPage() {
         onNextWeek={() => changeWeek(1)}
         canGoNext={weekStart < currentWeekStart}
       />
-      <WeeklyComparison />
+      <WeeklyComparison weekStart={weekStart} />
 
       <div className="day-header">
         <h2>
@@ -175,7 +179,19 @@ export default function DashboardPage() {
           const totalWeight = Math.round(Number(session.total_weight_kg));
           const { icon: WorkoutIcon, color } = workoutVisual(session.muscle_groups);
           return (
-            <Link to={`/log/${session.id}`} key={session.id} className="session-card-link">
+            <div
+              key={session.id}
+              className="session-card-link"
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate(`/log/${session.id}`)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  navigate(`/log/${session.id}`);
+                }
+              }}
+            >
               <GlassCard className="workout-row" style={{ "--row-accent": color }}>
                 <span className="workout-row-icon">
                   <WorkoutIcon size={40} />
@@ -230,7 +246,7 @@ export default function DashboardPage() {
                   </span>
                 </div>
               </GlassCard>
-            </Link>
+            </div>
           );
         })}
       </div>

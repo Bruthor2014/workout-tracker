@@ -80,15 +80,13 @@ export default function WorkoutExerciseBlock({
 
       {!isCardio && (
         <div className="log-exercise-meta">
-          <div className="log-type-select">
-            <span>Técnica</span>
-            <Select
-              value={ex.type}
-              onChange={(type) => onChange({ ...ex, type })}
-              options={TECHNIQUE_OPTIONS}
-              ariaLabel="Técnica do exercício"
-            />
-          </div>
+          <Select
+            value={ex.type}
+            onChange={(type) => onChange({ ...ex, type })}
+            options={TECHNIQUE_OPTIONS}
+            ariaLabel="Técnica do exercício"
+            className="log-type-select-inline"
+          />
           {ex.exercise_id && (
             <span className={`log-record${record ? "" : " empty"}`}>
               <IconTrophy size={16} />

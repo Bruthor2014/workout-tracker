@@ -59,7 +59,6 @@ export default function NewNutritionPlanForm({ submitPath, method = "POST", init
               className="glass-input"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ex: Plano de manutenção"
               required
             />
           </div>
@@ -72,7 +71,6 @@ export default function NewNutritionPlanForm({ submitPath, method = "POST", init
               className="glass-input nutrition-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Ex: Objetivo, horários, notas para o membro..."
               rows={2}
             />
           </div>

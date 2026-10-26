@@ -31,9 +31,11 @@ function useWidth(ref) {
 // Gráfico semanal de uma ou duas séries. `points`: [{ label, tooltipLabel,
 // value }]. `kind`: "bar" (barras) ou "line" (linha com área suave). Sem
 // `points2` fica igual ao perfil (uma série só, sem legenda — o título do
-// cartão diz o que é). Com `points2` (ex: comparação com um amigo), essa
-// segunda série desenha-se sempre como linha tracejada por cima — a
-// primeira mantém o seu estilo normal (bar ou linha), mesmo com as duas.
+// cartão diz o que é). Com `points2` (ex: comparação com um amigo), a
+// segunda série usa SEMPRE o mesmo `kind` que a primeira (duas barras lado
+// a lado, ou duas linhas) — só a cor (`color2`) as distingue, de propósito:
+// formas diferentes por série parecia dois gráficos diferentes em cima um
+// do outro, não uma comparação.
 // `formatValue` formata os valores no eixo e na tooltip. Passar o rato (ou
 // tocar) numa semana mostra a tooltip com os valores dessa semana.
 export default function ProgressChart({ points, kind = "bar", color, points2, color2, formatValue, ariaLabel }) {
@@ -58,6 +60,18 @@ export default function ProgressChart({ points, kind = "bar", color, points2, co
     ? `${linePath} L${xCenter(points.length - 1)},${baseline} L${xCenter(0)},${baseline} Z`
     : "";
   const line2Path = points2 ? points2.map((p, i) => `${i === 0 ? "M" : "L"}${xCenter(i)},${yAt(p.value)}`).join(" ") : "";
+  const area2Path =
+    points2 && points2.length
+      ? `${line2Path} L${xCenter(points2.length - 1)},${baseline} L${xCenter(0)},${baseline} Z`
+      : "";
+
+  // Caminho de uma barra (retângulo com cantos arredondados só em cima).
+  function barPath(x, w, value) {
+    const h = baseline - yAt(value);
+    if (h <= 0) return "";
+    const r = Math.min(4, h, w / 2);
+    return `M${x},${baseline} V${baseline - h + r} Q${x},${baseline - h} ${x + r},${baseline - h} H${x + w - r} Q${x + w},${baseline - h} ${x + w},${baseline - h + r} V${baseline} Z`;
+  }
 
   const active = hovered != null ? points[hovered] : null;
   const active2 = hovered != null && points2 ? points2[hovered] : null;
@@ -76,19 +90,34 @@ export default function ProgressChart({ points, kind = "bar", color, points2, co
           ))}
 
           {kind === "bar" &&
+            !points2 &&
             points.map((p, i) => {
-              const h = baseline - yAt(p.value);
               const w = Math.min(MAX_BAR, band - 2);
               const x = xCenter(i) - w / 2;
-              const r = Math.min(4, h, w / 2);
-              // Cantos arredondados só em cima (a ponta do valor); retos na base.
-              const d =
-                h > 0
-                  ? `M${x},${baseline} V${baseline - h + r} Q${x},${baseline - h} ${x + r},${baseline - h} H${x + w - r} Q${x + w},${baseline - h} ${x + w},${baseline - h + r} V${baseline} Z`
-                  : "";
+              const d = barPath(x, w, p.value);
               return d ? (
                 <path key={i} d={d} className={`pc-bar${hovered === i ? " active" : ""}`} />
               ) : null;
+            })}
+
+          {/* Duas séries em barras: lado a lado dentro da mesma banda, mais
+              estreitas, em vez de uma barra + uma linha tracejada por cima —
+              para as duas se lerem como a mesma coisa, só de cor diferente. */}
+          {kind === "bar" &&
+            points2 &&
+            points.map((p, i) => {
+              const gw = Math.min(MAX_BAR / 2, (band - 6) / 2);
+              const gap = 2;
+              const x1 = xCenter(i) - gw - gap / 2;
+              const x2 = xCenter(i) + gap / 2;
+              const d1 = barPath(x1, gw, p.value);
+              const d2 = barPath(x2, gw, points2[i]?.value ?? 0);
+              return (
+                <g key={i}>
+                  {d1 && <path d={d1} className={`pc-bar${hovered === i ? " active" : ""}`} />}
+                  {d2 && <path d={d2} className={`pc-bar2${hovered === i ? " active" : ""}`} />}
+                </g>
+              );
             })}
 
           {kind === "line" && (
@@ -101,8 +130,9 @@ export default function ProgressChart({ points, kind = "bar", color, points2, co
             </>
           )}
 
-          {points2 && (
+          {kind === "line" && points2 && (
             <>
+              <path d={area2Path} className="pc-area2" />
               <path d={line2Path} className="pc-line2" />
               {points2.map((p, i) => (
                 <circle key={i} cx={xCenter(i)} cy={yAt(p.value)} r={hovered === i ? 5 : 3.2} className="pc-dot2" />
@@ -150,7 +180,7 @@ export default function ProgressChart({ points, kind = "bar", color, points2, co
           </span>
           {active2 && (
             <span className="pc-tooltip-value">
-              <span className="pc-tooltip-key pc-tooltip-key-dashed" style={{ borderColor: color2 }} />
+              <span className="pc-tooltip-key" style={{ background: color2 }} />
               {formatValue(active2.value, false)}
             </span>
           )}

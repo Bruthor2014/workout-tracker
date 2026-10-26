@@ -139,12 +139,6 @@ export default function MealEditor({ meal, onChange, onRemove, canRemove = true,
               </button>
             </div>
 
-            <div className="meal-item-row-header">
-              <span>Foto</span>
-              <span>Elemento</span>
-              <span>Quantidade</span>
-              <span></span>
-            </div>
             {option.items.map((item, itemIndex) => (
               <div className="meal-item-row" key={itemIndex}>
                 <FoodPhotoButton
@@ -153,14 +147,17 @@ export default function MealEditor({ meal, onChange, onRemove, canRemove = true,
                   onError={onError}
                 />
                 <div className="meal-item-name">
+                  <label className="meal-item-field-label" htmlFor={`meal-item-food-${optIndex}-${itemIndex}`}>
+                    Elemento
+                  </label>
                   <div className="meal-item-name-input">
                     <input
+                      id={`meal-item-food-${optIndex}-${itemIndex}`}
                       type="text"
                       className="glass-input"
                       value={item.food_name}
                       onChange={(e) => updateItem(optIndex, itemIndex, { food_name: e.target.value })}
                       placeholder="Ex: Ovos"
-                      aria-label="Elemento"
                       required
                     />
                     <button
@@ -178,14 +175,19 @@ export default function MealEditor({ meal, onChange, onRemove, canRemove = true,
                     </span>
                   )}
                 </div>
-                <input
-                  type="text"
-                  className="glass-input"
-                  value={item.quantity}
-                  onChange={(e) => updateItem(optIndex, itemIndex, { quantity: e.target.value })}
-                  placeholder="Ex: 2 unidades"
-                  aria-label="Quantidade"
-                />
+                <div className="meal-item-qty">
+                  <label className="meal-item-field-label" htmlFor={`meal-item-qty-${optIndex}-${itemIndex}`}>
+                    Quantidade
+                  </label>
+                  <input
+                    id={`meal-item-qty-${optIndex}-${itemIndex}`}
+                    type="text"
+                    className="glass-input"
+                    value={item.quantity}
+                    onChange={(e) => updateItem(optIndex, itemIndex, { quantity: e.target.value })}
+                    placeholder="Ex: 2 unidades"
+                  />
+                </div>
                 <button
                   type="button"
                   className="nf-icon-danger"

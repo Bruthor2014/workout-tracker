@@ -5,17 +5,29 @@ const pool = require("../db/pool");
 const ITEM_DETAIL_COLUMNS = ["brand", "image_url", "off_code", "kcal_100g", "protein_100g", "carbs_100g", "fat_100g"];
 const NUMERIC_DETAILS = ["kcal_100g", "protein_100g", "carbs_100g", "fat_100g"];
 
+// Em produção (SUPABASE_URL configurado — ver services/storage.js), uma
+// foto carregada na app devolve um URL público completo do Supabase
+// Storage, não "/uploads/foods/...". Sem este prefixo na lista de
+// permitidos, cleanImageUrl rejeitava (punha a null) toda e qualquer foto
+// de alimento carregada em produção — ficavam todas sem imagem.
+const SUPABASE_FOODS_PREFIX = process.env.SUPABASE_URL
+  ? `${process.env.SUPABASE_URL}/storage/v1/object/public/${process.env.SUPABASE_STORAGE_BUCKET || "uploads"}/foods/`
+  : null;
+
 function cleanText(value, maxLength) {
   if (typeof value !== "string" || !value.trim()) return null;
   return value.trim().slice(0, maxLength);
 }
 
-// Só fotos carregadas na app ou imagens do Open Food Facts — nada de URLs
-// arbitrários vindos do cliente.
+// Só fotos carregadas na app (disco local ou Supabase Storage) ou imagens
+// do Open Food Facts — nada de URLs arbitrários vindos do cliente.
 function cleanImageUrl(value) {
   if (typeof value !== "string") return null;
   if (/^\/uploads\/foods\/[\w.-]+$/.test(value)) return value;
   if (/^https:\/\/images\.openfoodfacts\.org\//.test(value)) return value.slice(0, 500);
+  if (SUPABASE_FOODS_PREFIX && value.startsWith(SUPABASE_FOODS_PREFIX) && /^[\w.-]+$/.test(value.slice(SUPABASE_FOODS_PREFIX.length))) {
+    return value;
+  }
   return null;
 }
 
@@ -110,7 +122,8 @@ async function attachMealsToPlans(plans) {
 // `viewer` (req.user) é quem está a ver: decide o `can_edit` de cada plano.
 async function fetchPlansForMember(memberId, viewer) {
   const plansResult = await pool.query(
-    `SELECT np.id, np.name, np.description, np.created_at, np.created_by,
+    `SELECT np.id, np.name, np.description, np.created_at, np.created_by, np.is_active, np.order_index,
+            np.active_since,
             cu.name AS created_by_name, cu.role AS created_by_role,
             -- Pessoal = criado pelo próprio membro. created_by NULL = criado por
             -- alguém que já saiu do ginásio (continua a ser um plano do staff).
@@ -123,7 +136,7 @@ async function fetchPlansForMember(memberId, viewer) {
        FROM nutrition_plans np
        LEFT JOIN users cu ON cu.id = np.created_by
       WHERE np.member_id = $1
-      ORDER BY np.created_at DESC`,
+      ORDER BY np.order_index, np.created_at DESC`,
     [memberId, viewer.id, viewer.role, viewer.gymId]
   );
   return attachMealsToPlans(plansResult.rows);
@@ -131,7 +144,8 @@ async function fetchPlansForMember(memberId, viewer) {
 
 async function fetchPlanById(planId, viewer) {
   const planResult = await pool.query(
-    `SELECT np.id, np.name, np.description, np.created_at, np.created_by,
+    `SELECT np.id, np.name, np.description, np.created_at, np.created_by, np.is_active, np.order_index,
+            np.active_since,
             cu.name AS created_by_name, cu.role AS created_by_role,
             -- Pessoal = criado pelo próprio membro. created_by NULL = criado por
             -- alguém que já saiu do ginásio (continua a ser um plano do staff).
@@ -187,9 +201,18 @@ async function insertPlan(memberId, createdBy, { name, description, meals }) {
   try {
     await client.query("BEGIN");
 
+    // O primeiro plano de alguém fica logo ativo (não faz sentido pedir
+    // para escolher quando só há um); a partir do segundo, fica inativo
+    // até a pessoa escolher — não se substitui silenciosamente a escolha
+    // que já tinha feito. order_index: vai sempre para o fim da lista.
     const planResult = await client.query(
-      `INSERT INTO nutrition_plans (member_id, created_by, name, description)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO nutrition_plans (member_id, created_by, name, description, is_active, active_since, order_index)
+       VALUES (
+         $1, $2, $3, $4,
+         NOT EXISTS (SELECT 1 FROM nutrition_plans WHERE member_id = $1),
+         CASE WHEN NOT EXISTS (SELECT 1 FROM nutrition_plans WHERE member_id = $1) THEN now() END,
+         COALESCE((SELECT max(order_index) + 1 FROM nutrition_plans WHERE member_id = $1), 0)
+       )
        RETURNING id`,
       [memberId, createdBy, name, description || null]
     );
@@ -237,6 +260,45 @@ function validateNutritionBody(req, res) {
     }
   }
   return true;
+}
+
+// GET /api/nutrition-plans/completion-summary — "10/12 refeições cumpridas
+// este mês" do plano ATIVO do próprio (com mais do que um plano, só esse
+// conta — ver PUT /nutrition-plans/:id/active). Pensado para ser leve (sem
+// opções/itens) — usado no Dashboard e no Perfil, que carregam sempre, ao
+// contrário do cartão do plano em si.
+// Dias de calendário desde o início da janela (criação do plano, ou há 30
+// dias, o que for mais recente) até hoje, inclusive — tudo calculado como
+// DATE no Postgres (CURRENT_DATE), nunca em milissegundos decorridos no
+// Node. Milissegundos/24h subestima quando o plano foi criado ontem à
+// noite: passam-se menos de 24h reais mas já são 2 dias de calendário
+// diferentes, e o total ficava preso a "1 dia" mesmo já tendo refeições
+// cumpridas em 2 dias (completed > total, visivelmente errado).
+// completed_at também é DATE, por isso faz sentido comparar datas com
+// datas em vez de misturar com Date.now().
+async function getCompletionSummary(req, res) {
+  const result = await pool.query(
+    `WITH plan AS (
+       SELECT np.id, np.created_at::date AS created_date, count(ms.id)::int AS meal_count
+         FROM nutrition_plans np
+         LEFT JOIN meal_slots ms ON ms.nutrition_plan_id = np.id
+        WHERE np.member_id = $1 AND np.is_active
+        GROUP BY np.id, np.created_at
+     )
+     SELECT plan.meal_count,
+            (CURRENT_DATE - GREATEST(plan.created_date, CURRENT_DATE - 29))::int + 1 AS days,
+            (SELECT count(*)::int
+               FROM meal_completions mc
+               JOIN meal_slots ms ON ms.id = mc.meal_slot_id
+              WHERE ms.nutrition_plan_id = plan.id AND mc.member_id = $1
+                AND mc.completed_at >= GREATEST(plan.created_date, CURRENT_DATE - 29)) AS completed
+       FROM plan`,
+    [req.user.id]
+  );
+  const row = result.rows[0];
+  if (!row || row.meal_count === 0) return res.json(null);
+
+  res.json({ completed: row.completed, total: row.meal_count * row.days });
 }
 
 // Quem pode editar/eliminar um plano:
@@ -371,6 +433,154 @@ async function deletePlan(req, res) {
   res.status(204).send();
 }
 
+// Marcar refeições como concluídas é uma coisa pessoal (o registo de quem
+// realmente comeu, não de quem fez o plano) — só o próprio dono do plano
+// mexe nisto, mesmo que tenha sido um nutricionista a criá-lo.
+async function findOwnPlan(req, res) {
+  const result = await pool.query(`SELECT id, member_id FROM nutrition_plans WHERE id = $1`, [req.params.id]);
+  const plan = result.rows[0];
+  if (!plan) {
+    res.status(404).json({ message: "Plano não encontrado." });
+    return null;
+  }
+  if (plan.member_id !== req.user.id) {
+    res.status(403).json({ message: "Só o dono do plano pode fazer isto." });
+    return null;
+  }
+  return plan;
+}
+
+// PUT /api/nutrition-plans/:id/active — escolher qual plano está ativo
+// (com mais do que um, só o ativo conta para a estatística de refeições
+// cumpridas). Desativa qualquer outro do mesmo membro antes — o índice
+// único parcial em nutrition_plans(member_id) WHERE is_active garante que
+// nunca fica mais do que um ativo ao mesmo tempo.
+async function setActivePlan(req, res) {
+  const plan = await findOwnPlan(req, res);
+  if (!plan) return;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `UPDATE nutrition_plans SET is_active = false, active_since = NULL WHERE member_id = $1 AND id != $2`,
+      [plan.member_id, plan.id]
+    );
+    await client.query(`UPDATE nutrition_plans SET is_active = true, active_since = now() WHERE id = $1`, [plan.id]);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  res.json(await fetchPlanById(plan.id, req.user));
+}
+
+// PUT /api/nutrition-plans/reorder — body: { order: [planId, ...] }, a
+// nova ordem completa dos planos do próprio (arrastar na lista — ver
+// NutritionPage.jsx). Tem de incluir exatamente os planos que já tinha,
+// nem mais nem menos — sem isto dava para "roubar" um plano de outra
+// pessoa só por lhe saber o id.
+async function reorderPlans(req, res) {
+  const order = req.body.order;
+  if (!Array.isArray(order) || order.some((id) => !Number.isInteger(id))) {
+    return res.status(400).json({ message: "order tem de ser uma lista de ids." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // Verificação de posse dentro da MESMA transação que a escrita — lida
+    // com a mesma ligação, por isso não há janela entre ler "que planos
+    // tenho" e gravar a ordem onde outro pedido concorrente (ex: criar/
+    // eliminar um plano noutro separador) pudesse dessincronizar os dois.
+    const ownResult = await client.query(`SELECT id FROM nutrition_plans WHERE member_id = $1`, [req.user.id]);
+    const ownIds = new Set(ownResult.rows.map((r) => r.id));
+    const orderIds = new Set(order);
+    const sameSet =
+      orderIds.size === order.length && orderIds.size === ownIds.size && order.every((id) => ownIds.has(id));
+    if (!sameSet) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: "A lista tem de incluir exatamente os teus planos atuais." });
+    }
+
+    for (let i = 0; i < order.length; i++) {
+      await client.query(`UPDATE nutrition_plans SET order_index = $1 WHERE id = $2 AND member_id = $3`, [
+        i,
+        order[i],
+        req.user.id,
+      ]);
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  res.json(await fetchPlansForMember(req.user.id, req.user));
+}
+
+function parseDateParam(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  return value;
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// GET /api/nutrition-plans/:id/completions?date=YYYY-MM-DD — refeições já
+// marcadas nesse dia (por omissão hoje).
+async function listCompletions(req, res) {
+  const plan = await findOwnPlan(req, res);
+  if (!plan) return;
+  const date = parseDateParam(req.query.date) || today();
+
+  const result = await pool.query(
+    `SELECT mc.meal_slot_id
+       FROM meal_completions mc
+       JOIN meal_slots ms ON ms.id = mc.meal_slot_id
+      WHERE ms.nutrition_plan_id = $1 AND mc.member_id = $2 AND mc.completed_at = $3`,
+    [plan.id, req.user.id, date]
+  );
+  res.json({ date, completed_meal_slot_ids: result.rows.map((r) => r.meal_slot_id) });
+}
+
+// PUT /api/nutrition-plans/:id/meals/:mealId/completion — body: { date?, completed }
+async function setCompletion(req, res) {
+  const plan = await findOwnPlan(req, res);
+  if (!plan) return;
+  const date = parseDateParam(req.body.date) || today();
+
+  const slotCheck = await pool.query(`SELECT id FROM meal_slots WHERE id = $1 AND nutrition_plan_id = $2`, [
+    req.params.mealId,
+    plan.id,
+  ]);
+  if (slotCheck.rows.length === 0) {
+    return res.status(404).json({ message: "Refeição não encontrada neste plano." });
+  }
+
+  if (req.body.completed) {
+    await pool.query(
+      `INSERT INTO meal_completions (meal_slot_id, member_id, completed_at)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (meal_slot_id, member_id, completed_at) DO NOTHING`,
+      [req.params.mealId, req.user.id, date]
+    );
+  } else {
+    await pool.query(`DELETE FROM meal_completions WHERE meal_slot_id = $1 AND member_id = $2 AND completed_at = $3`, [
+      req.params.mealId,
+      req.user.id,
+      date,
+    ]);
+  }
+  res.json({ date, meal_slot_id: Number(req.params.mealId), completed: Boolean(req.body.completed) });
+}
+
 module.exports = {
   listPlans,
   createPlan,
@@ -379,4 +589,9 @@ module.exports = {
   updatePlan,
   updateMeal,
   deletePlan,
+  listCompletions,
+  getCompletionSummary,
+  setCompletion,
+  setActivePlan,
+  reorderPlans,
 };

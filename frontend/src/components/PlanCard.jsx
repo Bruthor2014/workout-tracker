@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import GlassCard from "./GlassCard";
 import NewPlanForm from "./NewPlanForm";
 import PlanDayEditor from "./PlanDayEditor";
-import { IconDumbbell, IconPencil, IconPlay, IconSave, IconTrash } from "./Icons";
+import { IconDumbbell, IconPencil, IconPlay, IconPrinter, IconSave, IconTrash } from "./Icons";
 import { apiRequest } from "../api/client";
 import { muscleGroupVisual, visualForMuscleGroups } from "../utils/muscleGroups";
 import { formatReps } from "../utils/reps";
@@ -168,7 +168,7 @@ export default function PlanCard({ plan, exercises, records, editable: editableP
   const exerciseCount = plan.days.reduce((sum, day) => sum + day.exercises.length, 0);
 
   return (
-    <GlassCard className="nplan">
+    <GlassCard className="nplan print-area">
       <div className="nplan-header">
         <span className="nplan-icon plan-icon">
           <IconDumbbell size={24} />
@@ -186,23 +186,29 @@ export default function PlanCard({ plan, exercises, records, editable: editableP
             </span>
           </div>
         </div>
-        {editable && (
-          <div className="nplan-actions">
-            <button type="button" className="nplan-action" onClick={() => setEditing(true)}>
-              <IconPencil size={16} />
-              Editar
-            </button>
-            <button
-              type="button"
-              className="nplan-action danger"
-              onClick={handleDelete}
-              disabled={deleting}
-              aria-label="Eliminar plano"
-            >
-              <IconTrash size={16} />
-            </button>
-          </div>
-        )}
+        <div className="nplan-actions">
+          <button type="button" className="nplan-action" onClick={() => window.print()}>
+            <IconPrinter size={16} />
+            Imprimir
+          </button>
+          {editable && (
+            <>
+              <button type="button" className="nplan-action" onClick={() => setEditing(true)}>
+                <IconPencil size={16} />
+                Editar
+              </button>
+              <button
+                type="button"
+                className="nplan-action danger"
+                onClick={handleDelete}
+                disabled={deleting}
+                aria-label="Eliminar plano"
+              >
+                <IconTrash size={16} />
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {error && <p className="error-text">{error}</p>}

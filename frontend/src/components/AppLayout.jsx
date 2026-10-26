@@ -5,6 +5,7 @@ import BottomNav from "./BottomNav";
 import MobileTopBar from "./MobileTopBar";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { BackOverrideProvider } from "../context/BackOverrideContext";
 
 // Layout para todas as páginas depois do login: sidebar + conteúdo.
 // Em ecrãs estreitos (ver @media em App.css), a Sidebar passa a gaveta
@@ -63,14 +64,16 @@ export default function AppLayout() {
   }, [drawerOpen]);
 
   return (
-    <div className={`app-layout${drawerOpen ? " drawer-open" : ""}`}>
-      <div className="sidebar-drawer-overlay" onClick={() => setDrawerOpen(false)} />
-      <Sidebar onNavigate={() => setDrawerOpen(false)} />
-      <div className="app-main">
-        <MobileTopBar onOpenDrawer={() => setDrawerOpen(true)} />
-        <Outlet />
+    <BackOverrideProvider>
+      <div className={`app-layout${drawerOpen ? " drawer-open" : ""}`}>
+        <div className="sidebar-drawer-overlay" onClick={() => setDrawerOpen(false)} />
+        <Sidebar onNavigate={() => setDrawerOpen(false)} />
+        <div className="app-main">
+          <MobileTopBar onOpenDrawer={() => setDrawerOpen(true)} />
+          <Outlet />
+        </div>
+        <BottomNav />
       </div>
-      <BottomNav />
-    </div>
+    </BackOverrideProvider>
   );
 }

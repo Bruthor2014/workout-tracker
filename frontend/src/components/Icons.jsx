@@ -21,6 +21,21 @@ export function IconMenu({ size = 24, className }) {
   );
 }
 
+// Pega para arrastar (reordenar listas por toque/rato) — seis pontos, não
+// um traço, por isso cada <circle> define a sua própria "fill".
+export function IconGripVertical({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <circle cx="9" cy="6" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="12" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="18" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="6" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="18" r="1.3" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function IconX({ size = 24, className }) {
   return (
     <svg {...base} width={size} height={size} className={className}>
@@ -372,6 +387,16 @@ export function IconSave({ size = 24, className }) {
   );
 }
 
+export function IconPrinter({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <path d="M6 9V3h12v6" />
+      <rect x="4" y="9" width="16" height="8" rx="1.5" />
+      <path d="M6 15h12v6H6z" />
+    </svg>
+  );
+}
+
 export function IconPlay({ size = 24, className }) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} className={className} fill="currentColor">
@@ -439,6 +464,16 @@ export function IconCheck({ size = 24, className }) {
   return (
     <svg {...base} width={size} height={size} className={className} strokeWidth={2.4}>
       <polyline points="5 12.5 10 17.5 19 7" />
+    </svg>
+  );
+}
+
+export function IconInfo({ size = 24, className }) {
+  return (
+    <svg {...base} width={size} height={size} className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <line x1="12" y1="11" x2="12" y2="16.5" />
+      <circle cx="12" cy="7.5" r="0.75" fill="currentColor" stroke="none" />
     </svg>
   );
 }

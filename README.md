@@ -52,7 +52,7 @@ Install with `npm install` inside each of `backend/` and `frontend/`.
 ### Member (self-service)
 
 - Workout plans (multi-day, per-exercise sets/reps/target load) — create, edit, delete
-- Nutrition plans (meals → multiple options → itemized foods with quantity) — create, edit, delete
+- Nutrition plans (meals → multiple options → itemized foods with quantity) — create, edit, delete, reorder by drag; mark meals as completed per day, pick which plan is "active" (only the active plan counts toward the completion stat)
 - Live or manual workout session logging, with a running timer
 - Body composition history (weight, body fat %, lean/muscle/bone mass, body water %) with evolution charts
 - Dashboard: weekly attendance calendar, weekly training volume/time comparison

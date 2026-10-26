@@ -24,6 +24,7 @@ const occupancyRoutes = require("./routes/occupancyRoutes");
 const attendanceRoutes = require("./routes/attendanceRoutes");
 const friendRoutes = require("./routes/friendRoutes");
 const { startClassChecker } = require("./services/classChecker");
+const { startSubscriptionReminders } = require("./services/subscriptionNotify");
 
 const app = express();
 
@@ -78,6 +79,8 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 // Cancela automaticamente as aulas de grupo sem mínimo de inscritos/sem PT.
 startClassChecker();
+// Avisa membros com subscrição a expirar nos próximos dias.
+startSubscriptionReminders();
 app.listen(PORT, () => {
   console.log(`Backend a correr em http://localhost:${PORT}`);
 });

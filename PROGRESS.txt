@@ -1,5 +1,5 @@
 WORKOUT TRACKER — ESTADO DO PROJETO
-Última atualização: 2026-10-25
+Última atualização: 2026-10-26
 
 Este ficheiro existe para continuidade entre máquinas/sessões — a conversa
 com o Claude e a memória local dele ficam presas a cada computador. Isto
@@ -114,6 +114,24 @@ MEMBRO (uso pessoal)
   (GET /sessions/records) aparece junto de cada exercício no editor do
   plano. Ao iniciar um treino a partir de um dia do plano, a técnica e o
   alvo de cada série já vêm pré-preenchidos.
+- Planos de nutrição (2026-10-26, migrations 030-032): a lista de planos
+  agora é colapsável (NutritionPlanRow — só o cartão aberto mostra
+  detalhes) e dá para reordenar arrastando (PUT /nutrition-plans/reorder,
+  coluna order_index). Com mais do que um plano, o membro escolhe qual
+  fica "ativo" (PUT /nutrition-plans/:id/active, coluna is_active com
+  índice único parcial — nunca mais do que um ativo ao mesmo tempo; o
+  primeiro plano de alguém fica ativo automaticamente). Cada refeição tem
+  uma checkbox "Marcar como feita" por dia (tabela meal_completions, PUT
+  /nutrition-plans/:id/meals/:mealId/completion e GET .../:id/completions)
+  — é pessoal, só o dono do plano marca, mesmo que o plano tenha sido
+  feito por um nutricionista. GET /nutrition-plans/completion-summary dá
+  "X/Y refeições cumpridas este mês" só do plano ATIVO (NutritionCompletionNote,
+  usado no Dashboard e no Perfil).
+- Pesquisa de alimentos (foodController.js) corrida com duas fontes do
+  Open Food Facts em paralelo (API clássica + search.openfoodfacts.org,
+  usa a primeira que responder) e com reordenação local por relevância ao
+  termo pesquisado (antes a ordem vinda da API era má — ex: "bife de
+  peru" mostrava "Bife de Atum" antes de "Peito de peru").
 - Composição corporal com gráficos de evolução
 - Treinos em direto (cronómetro) ou manuais
 - Dashboard: calendário semanal, estatísticas reais, progresso mensal
@@ -236,11 +254,20 @@ BUGS REAIS ENCONTRADOS E CORRIGIDOS (cronológico)
   mensagens a membros normais (só a outro staff) — `STAFF_ROLES` do
   messageController.js esquecia estes dois roles; a pesquisa por email em
   Mensagens não servia de nada sem isto corrigido primeiro
+- 2026-10-26: MobileTopBar.jsx ganhou um botão "Voltar" fixo (navigate(-1),
+  sempre visível em qualquer página mobile, ao lado do logótipo/avatar/
+  hambúrguer). GoogleSignInButton.jsx media a largura do botão da Google
+  com um valor fixo que não batia certo com a largura real do cartão —
+  passou a medir o espaço real (`btnRef.current.offsetWidth`, até ao
+  máximo de 400px que a Google permite). Modal.jsx passou a contar quantos
+  modals estão abertos ao mesmo tempo (ex: o de confirmar nome por cima do
+  de login do Google) para só destravar o scroll da página quando o
+  último fechar.
 
 ======================================================================
 BASE DE DADOS
 ======================================================================
-Migrations incrementais em backend/db/migrations/001...029 — todas
+Migrations incrementais em backend/db/migrations/001...032 — todas
 escritas de forma defensiva (IF NOT EXISTS / IF EXISTS), seguras de
 correr mais que uma vez. Correr uma migration nova em AMBAS as bases —
 local (via o loop abaixo, ou um script node com `pg` direto) E produção
@@ -272,6 +299,28 @@ IMPORTANTE — a BD local já NÃO tem os dados de teste antigos. Em
 2026-10-14 foi substituída pelos dados do Supabase (que tinham muito mais
 conteúdo: 31 utilizadores, mensagens, aulas, turnos, etc., vindos de
 testes feitos na outra máquina) — ver próxima secção.
+
+======================================================================
+IDEIAS PARA O MEMBRO (2026-10-26, propostas pelo subagente `ideias`)
+======================================================================
+EM CURSO AGORA: ranking semanal entre amigos + aba de comparação mais
+completa (FriendsPage.jsx / FriendComparePage.jsx / friendController.js).
+
+Backlog, por impacto (nenhuma destas começada):
+- Cronómetro de descanso entre séries (LogWorkoutPage.jsx) — baixo/médio.
+- Totais de calorias/macros por dia num plano de nutrição — médio.
+- Meta de peso/composição corporal com barra de progresso — baixo/médio.
+- Sugestão do "próximo treino" no Dashboard (a partir do plan_day_id da
+  última sessão) — baixo.
+- Duplicar um plano de treino existente — médio.
+- Vídeo/instrução de execução por exercício (sobretudo trabalho de
+  conteúdo, não só código) — baixo/médio.
+
+Descartadas por agora (não repropor sem motivo novo):
+- Notificações push no telemóvel — bloqueado pela app Android (sem
+  Android Studio/SDK instalado nesta máquina).
+- Filtro de alimentos por restrições alimentares — dados de
+  alergénios/categorias do Open Food Facts inconsistentes demais.
 
 ======================================================================
 POR FAZER / EM ABERTO
@@ -328,8 +377,13 @@ POR FAZER / EM ABERTO
 - O código de gestão (gymController, classController, financeController,
   scheduleGenerator, etc.) ainda não foi revisto linha a linha a fundo —
   só testado a correr (smoke test + uso real ao longo desta sessão).
-- Não se sabe se `admin` ainda é usado nalgum sítio, ou se foi totalmente
-  substituído pelo conceito de `dono`.
+- CONFIRMADO (2026-10-26, grep a `'admin'` em todo o backend): `admin` não
+  tem nenhum `requireRole`/`if role === "admin"` que dê acesso a nada — só
+  aparece em exclusões defensivas (`role <> 'admin'`, `NOT IN (...,
+  'admin')`) para não listar essa role em sítios como contactos de
+  mensagens ou pesquisa de membros. Está mesmo morto, substituído por
+  `dono` — pode manter-se só como valor reservado no enum, sem ação
+  nenhuma pendente.
 - Imagens dos exercícios ainda não aparecem nos cartões de plano, só no
   seletor.
 - Passwords da maioria das contas vindas do Supabase são desconhecidas

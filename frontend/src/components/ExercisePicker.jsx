@@ -190,7 +190,7 @@ export default function ExercisePicker({ exercises, value, onChange, onExerciseC
             {selected.name}
           </span>
         ) : (
-          <span className="text-secondary">Escolhe um exercício...</span>
+          <span className="text-secondary">Exercício</span>
         )}
         <span style={{ display: "inline-flex", transform: "rotate(90deg)" }}>
           <IconChevronRight size={16} />

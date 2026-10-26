@@ -40,10 +40,20 @@ const formatPrice = (cents) => (cents / 100).toLocaleString("pt-PT", { minimumFr
 // cancelou), em dia com o pagamento, ou em atraso (paid_until no passado —
 // ver payment_status em subscriptionController.js). "Ativo" cobre o caso
 // raro de uma subscrição ativa sem preço configurado (ex: coach externo).
+const EXPIRING_SOON_DAYS = 3;
+
 function subscriptionStatusInfo(sub) {
   if (!sub.is_active) return { label: "Inativo", dotClass: "" };
   if (sub.payment_status === "late") return { label: "Em atraso", dotClass: "late" };
-  if (sub.payment_status === "paid") return { label: "Em dia", dotClass: "active" };
+  if (sub.payment_status === "paid") {
+    if (sub.next_renewal_date) {
+      const days = Math.ceil((new Date(`${sub.next_renewal_date}T00:00:00`) - new Date()) / (1000 * 60 * 60 * 24));
+      if (days <= EXPIRING_SOON_DAYS) {
+        return { label: days <= 0 ? "Expira hoje" : `Expira em ${days} dia${days === 1 ? "" : "s"}`, dotClass: "late" };
+      }
+    }
+    return { label: "Em dia", dotClass: "active" };
+  }
   return { label: "Ativo", dotClass: "active" };
 }
 
@@ -52,7 +62,16 @@ function SubscriptionEditor({ memberId, subscriptions, staffByRole, onSaved, onC
     Object.fromEntries(
       SERVICES.map((s) => [
         s.type,
-        { is_active: subscriptions[s.type].is_active, assigned_staff_id: subscriptions[s.type].assigned_staff_id ?? "" },
+        {
+          is_active: subscriptions[s.type].is_active,
+          assigned_staff_id: subscriptions[s.type].assigned_staff_id ?? "",
+          // Vazio = sem preço próprio, usa o do ginásio. Só pré-preenche se
+          // já houver um override (is_custom_price), nunca com o preço do
+          // ginásio — isso continua a aparecer só como placeholder.
+          priceOverride: subscriptions[s.type].is_custom_price
+            ? String(subscriptions[s.type].price_cents / 100).replace(".", ",")
+            : "",
+        },
       ])
     )
   );
@@ -64,18 +83,49 @@ function SubscriptionEditor({ memberId, subscriptions, staffByRole, onSaved, onC
   }
 
   async function handleSave() {
-    setSaving(true);
     setError("");
+
+    // Valida todos os preços ANTES de gravar seja o que for — sem isto, um
+    // preço ilegível (ex: "abc") era só ignorado em silêncio: o editor
+    // fechava como se tivesse corrido tudo bem, mas o override não tinha
+    // sido aplicado nem limpo.
+    for (const service of SERVICES) {
+      const priceInput = drafts[service.type].priceOverride.trim();
+      if (!priceInput) continue;
+      const cents = Math.round(parseFloat(priceInput.replace(",", ".")) * 100);
+      if (!Number.isFinite(cents) || cents < 0) {
+        setError(`Preço inválido em "${service.label}": "${priceInput}". Usa um número (ex: 35,00) ou deixa vazio.`);
+        return;
+      }
+    }
+
+    setSaving(true);
     try {
-      const results = {};
       for (const service of SERVICES) {
         const draft = drafts[service.type];
-        results[service.type] = await apiRequest(`/members/${memberId}/subscriptions/${service.type}`, {
+        await apiRequest(`/members/${memberId}/subscriptions/${service.type}`, {
           method: "PUT",
           body: { is_active: draft.is_active, assigned_staff_id: draft.is_active ? draft.assigned_staff_id || null : null },
         });
+
+        const original = subscriptions[service.type];
+        const priceInput = draft.priceOverride.trim();
+        if (priceInput) {
+          const cents = Math.round(parseFloat(priceInput.replace(",", ".")) * 100);
+          if (Number.isFinite(cents) && cents >= 0) {
+            await apiRequest(`/members/${memberId}/subscriptions/${service.type}/price`, {
+              method: "PUT",
+              body: { price_cents: cents },
+            });
+          }
+        } else if (original.is_custom_price) {
+          await apiRequest(`/members/${memberId}/subscriptions/${service.type}/price`, { method: "DELETE" });
+        }
       }
-      onSaved(results);
+      // Os endpoints acima devolvem o mapa completo em formatos diferentes
+      // (um serviço só / todos) — mais simples voltar a pedir tudo de uma
+      // vez do que tentar remendar o estado anterior com respostas parciais.
+      onSaved(await apiRequest(`/members/${memberId}/subscriptions`));
       onClose();
     } catch (err) {
       setError(err.message);
@@ -131,6 +181,23 @@ function SubscriptionEditor({ memberId, subscriptions, staffByRole, onSaved, onC
                     ...staffByRole[service.staffRole].map((s) => ({ value: String(s.id), label: s.name })),
                   ]}
                   ariaLabel={service.staffLabel}
+                />
+              </div>
+            )}
+
+            {draft.is_active && (
+              <div style={{ marginTop: 8 }}>
+                <label className="field-label" htmlFor={`price-${service.type}`}>
+                  Preço próprio (desconto/promoção) — opcional
+                </label>
+                <input
+                  id={`price-${service.type}`}
+                  type="text"
+                  inputMode="decimal"
+                  className="glass-input"
+                  placeholder="Vazio = preço do ginásio"
+                  value={draft.priceOverride}
+                  onChange={(e) => updateDraft(service.type, { priceOverride: e.target.value })}
                 />
               </div>
             )}

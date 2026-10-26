@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import GlassCard from "../components/GlassCard";
 import NutritionPlanCard from "../components/NutritionPlanCard";
+import NutritionPlanRow from "../components/NutritionPlanRow";
 import NewNutritionPlanForm from "../components/NewNutritionPlanForm";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { useBackButtonOverride } from "../context/BackOverrideContext";
 import { IconApple } from "../components/Icons";
 
 function NutritionMarketingView() {
@@ -31,6 +33,29 @@ function NutritionAuthedView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
+  // Só um plano aberto de cada vez — a lista fica fechada (NutritionPlanRow)
+  // até se clicar num para ver os detalhes (NutritionPlanCard).
+  const [openId, setOpenId] = useState(null);
+  const [dragId, setDragId] = useState(null);
+
+  // Voltar fecha o plano aberto (ou o formulário de novo plano) em vez de
+  // sair da página — sem isto, o botão Voltar do MobileTopBar navegava no
+  // histórico do browser, que pode ser outra página inteiramente diferente
+  // de onde se veio (ex: Planos de Treino), não "um passo atrás" dentro
+  // desta página.
+  useBackButtonOverride(
+    showForm || openId != null,
+    useCallback(() => {
+      if (openId != null) setOpenId(null);
+      else setShowForm(false);
+    }, [openId])
+  );
+
+  // planId -> elemento DOM da linha, para medir a posição durante o
+  // arrasto (ver handlePointerMove). Não precisa de causar re-render,
+  // por isso é um ref, não state.
+  const rowRefs = useRef(new Map());
+  const dragPointerId = useRef(null);
 
   function loadPlans() {
     setLoading(true);
@@ -43,6 +68,64 @@ function NutritionAuthedView() {
   useEffect(() => {
     loadPlans();
   }, []);
+
+  function setRowRef(planId) {
+    return (el) => {
+      if (el) rowRefs.current.set(planId, el);
+      else rowRefs.current.delete(planId);
+    };
+  }
+
+  // Índice da linha cujo centro está mais perto de `y` — para onde a
+  // linha arrastada "salta" quando passa a meio de outra.
+  function closestIndexAtY(y) {
+    let closest = null;
+    let closestDist = Infinity;
+    plans.forEach((plan, i) => {
+      const el = rowRefs.current.get(plan.id);
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      const dist = Math.abs(y - mid);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closest = i;
+      }
+    });
+    return closest;
+  }
+
+  function handlePointerDown(e, planId) {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragPointerId.current = e.pointerId;
+    setDragId(planId);
+  }
+
+  function handlePointerMove(e) {
+    if (dragPointerId.current !== e.pointerId || dragId == null) return;
+    const currentIndex = plans.findIndex((p) => p.id === dragId);
+    const targetIndex = closestIndexAtY(e.clientY);
+    if (currentIndex === -1 || targetIndex === null || targetIndex === currentIndex) return;
+    setPlans((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(currentIndex, 1);
+      next.splice(targetIndex, 0, item);
+      return next;
+    });
+  }
+
+  function handlePointerUp(e) {
+    if (dragPointerId.current !== e.pointerId) return;
+    dragPointerId.current = null;
+    setDragId(null);
+    if (plans.length < 2) return;
+    apiRequest("/nutrition-plans/reorder", { method: "PUT", body: { order: plans.map((p) => p.id) } }).catch(
+      (err) => {
+        setError(err.message);
+        loadPlans(); // a ordem local pode ter ficado dessincronizada da API
+      }
+    );
+  }
 
   return (
     <div className="page-container nutrition-page">
@@ -81,9 +164,32 @@ function NutritionAuthedView() {
       )}
 
       <div className="plan-list">
-        {plans.map((plan) => (
-          <NutritionPlanCard key={plan.id} plan={plan} editable onChanged={loadPlans} />
-        ))}
+        {plans.map((plan) =>
+          plan.id === openId ? (
+            <NutritionPlanCard
+              key={plan.id}
+              plan={plan}
+              editable
+              trackCompletion
+              onChanged={loadPlans}
+              onCollapse={() => setOpenId(null)}
+            />
+          ) : (
+            <NutritionPlanRow
+              key={plan.id}
+              ref={setRowRef(plan.id)}
+              plan={plan}
+              onOpen={() => setOpenId(plan.id)}
+              dragging={dragId === plan.id}
+              handleProps={{
+                onPointerDown: (e) => handlePointerDown(e, plan.id),
+                onPointerMove: handlePointerMove,
+                onPointerUp: handlePointerUp,
+                onPointerCancel: handlePointerUp,
+              }}
+            />
+          )
+        )}
       </div>
     </div>
   );
