@@ -1664,6 +1664,13 @@
   align-items: center;
   justify-content: center;
   aspect-ratio: 3 / 2;
+  /* Reserva de altura para quando "aspect-ratio" não tem suporte (Safari
+     < 15 — comum em iOS mais antigo, incl. o browser interno do
+     Instagram): sem isto, a caixa colapsava para a altura do ícone (ou
+     para 0, nos cartões com foto, já que o <img> é position:absolute e
+     sai do fluxo normal) — o cartão ficava esmagado/cortado. Com
+     aspect-ratio suportado, esta altura é só um mínimo, nunca se nota. */
+  min-height: 110px;
   background: color-mix(in srgb, var(--exercise-color) 14%, rgba(255, 255, 255, 0.03));
   color: var(--exercise-color);
 }
