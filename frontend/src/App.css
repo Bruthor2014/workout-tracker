@@ -4370,7 +4370,7 @@
 .plan-exercise-sets-head,
 .plan-exercise-set {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr) 36px;
+  grid-template-columns: 76px minmax(0, 1fr) minmax(0, 1fr) 36px;
   align-items: center;
   gap: 14px;
 }
@@ -4384,10 +4384,15 @@
 
 .plan-exercise-sets-head span:first-child {
   text-align: center;
+  white-space: nowrap;
 }
 
 .plan-exercise-set + .plan-exercise-set {
   margin-top: 8px;
+}
+
+.plan-exercise-set .glass-input {
+  padding: 11px 14px;
 }
 
 .plan-form .glass-input.input-invalid {
@@ -4445,8 +4450,18 @@
   }
   .plan-exercise-sets-head,
   .plan-exercise-set {
-    grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) 30px;
-    gap: 8px;
+    /* Mesmo ajuste do registo de treino (.log-exercise-set): 1.ª coluna
+       mais larga para "Série" não transbordar, e a última a bater certo
+       com a largura real do botão de remover (32px). */
+    grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr) 32px;
+    gap: 6px;
+  }
+  .plan-exercise-sets-head span:first-child {
+    white-space: normal;
+  }
+  .plan-exercise-set .glass-input {
+    padding: 9px 8px;
+    font-size: 0.85rem;
   }
 }
 

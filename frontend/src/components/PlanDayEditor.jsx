@@ -110,15 +110,13 @@ export default function PlanDayEditor({ day, exercises, records, onChange, onRem
 
               {!isCardio && (
                 <div className="log-exercise-meta">
-                  <div className="log-type-select">
-                    <span>Técnica</span>
-                    <Select
-                      value={row.set_type || "normal"}
-                      onChange={(set_type) => updateRow(exIndex, "set_type", set_type)}
-                      options={TECHNIQUE_OPTIONS}
-                      ariaLabel="Técnica do exercício"
-                    />
-                  </div>
+                  <Select
+                    value={row.set_type || "normal"}
+                    onChange={(set_type) => updateRow(exIndex, "set_type", set_type)}
+                    options={TECHNIQUE_OPTIONS}
+                    ariaLabel="Técnica do exercício"
+                    className="log-type-select-inline"
+                  />
                   {row.exercise_id && (
                     <span className={`log-record${record ? "" : " empty"}`}>
                       <IconTrophy size={16} />
