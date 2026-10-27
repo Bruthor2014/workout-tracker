@@ -301,6 +301,63 @@ async function getCompletionSummary(req, res) {
   res.json({ completed: row.completed, total: row.meal_count * row.days });
 }
 
+// "quantity" é texto livre (ex: "2 unidades", "1 fatia", "150g") — só dá
+// para converter em calorias quando vem claramente em gramas/kg. Nesses
+// casos devolve os gramas; nos outros (unidades, fatias, vazio, só um
+// número sem unidade) devolve null — esse item fica fora do total, nunca
+// se inventa uma conversão (ex: tratar "2 unidades" como "2 gramas").
+function parseGrams(quantity) {
+  if (!quantity) return null;
+  const match = String(quantity).match(/(\d+(?:[.,]\d+)?)\s*(kg|kilos?|gr|g|gramas?)\b/i);
+  if (!match) return null;
+  const amount = parseFloat(match[1].replace(",", "."));
+  if (!Number.isFinite(amount)) return null;
+  return match[2].toLowerCase().startsWith("k") ? amount * 1000 : amount;
+}
+
+// GET /api/nutrition-plans/calories-today — calorias dos itens das
+// refeições já marcadas como cumpridas HOJE, do plano ativo. Usa sempre a
+// 1.ª opção de cada refeição (não há registo de qual opção foi realmente
+// seguida quando há mais do que uma) — é uma estimativa, não um diário
+// alimentar exato. `items_counted`/`items_total` dizem quantos itens
+// entraram de facto na conta, para o frontend poder avisar se ficou
+// incompleto (ver parseGrams).
+async function getCaloriesConsumedToday(req, res) {
+  const plan = await pool.query(`SELECT id FROM nutrition_plans WHERE member_id = $1 AND is_active`, [
+    req.user.id,
+  ]);
+  if (!plan.rows[0]) return res.json({ calories: null, items_counted: 0, items_total: 0 });
+
+  const completed = await pool.query(
+    `SELECT mc.meal_slot_id
+       FROM meal_completions mc
+       JOIN meal_slots ms ON ms.id = mc.meal_slot_id
+      WHERE mc.member_id = $1 AND mc.completed_at = CURRENT_DATE AND ms.nutrition_plan_id = $2`,
+    [req.user.id, plan.rows[0].id]
+  );
+  if (completed.rows.length === 0) return res.json({ calories: 0, items_counted: 0, items_total: 0 });
+
+  const slotIds = completed.rows.map((r) => r.meal_slot_id);
+  const items = await pool.query(
+    `SELECT moi.quantity, moi.kcal_100g
+       FROM meal_option_items moi
+       JOIN meal_options mo ON mo.id = moi.meal_option_id
+      WHERE mo.meal_slot_id = ANY($1::int[])
+        AND mo.order_index = (SELECT MIN(order_index) FROM meal_options WHERE meal_slot_id = mo.meal_slot_id)`,
+    [slotIds]
+  );
+
+  let calories = 0;
+  let counted = 0;
+  for (const item of items.rows) {
+    const grams = parseGrams(item.quantity);
+    if (grams == null || item.kcal_100g == null) continue;
+    calories += (Number(item.kcal_100g) * grams) / 100;
+    counted++;
+  }
+  res.json({ calories: Math.round(calories), items_counted: counted, items_total: items.rows.length });
+}
+
 // Quem pode editar/eliminar um plano:
 // - quem o criou (o nutricionista que o fez para o membro, ou o próprio membro
 //   num plano pessoal);
@@ -591,6 +648,7 @@ module.exports = {
   deletePlan,
   listCompletions,
   getCompletionSummary,
+  getCaloriesConsumedToday,
   setCompletion,
   setActivePlan,
   reorderPlans,

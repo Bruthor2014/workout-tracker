@@ -8,6 +8,7 @@ import { apiRequest, resolveAssetUrl } from "../api/client";
 import { mealVisual } from "../utils/meals";
 import { formMealToApi, mealToForm } from "../utils/mealForm";
 import { activeSinceLabel, toDateKey } from "../utils/date";
+import { estimateMealCalories } from "../utils/nutritionMacros";
 
 function FoodItem({ item }) {
   const meta = [item.brand, item.kcal_100g != null && `${Number(item.kcal_100g)} kcal/100 g`].filter(Boolean);
@@ -243,6 +244,7 @@ export default function NutritionPlanCard({ plan, editable: editableProp, onChan
           }
           const { icon: MealIcon, color } = mealVisual(meal.name);
           const isCompleted = trackCompletion && completedIds.has(meal.id);
+          const calorieEstimate = estimateMealCalories(meal);
           return (
             <section
               key={meal.id}
@@ -255,6 +257,11 @@ export default function NutritionPlanCard({ plan, editable: editableProp, onChan
                 </span>
                 <h4>{meal.name}</h4>
                 {meal.options.length > 1 && <span className="nplan-meal-count">{meal.options.length} opções</span>}
+                {calorieEstimate && (
+                  <span className="nplan-meal-kcal" title="Estimativa — só conta alimentos com valores e quantidade em gramas">
+                    ≈ {calorieEstimate.calories} kcal
+                  </span>
+                )}
               </div>
 
               <div className="nplan-options">

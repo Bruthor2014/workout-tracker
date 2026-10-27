@@ -1218,3 +1218,7 @@ ALTER TABLE nutrition_plans
     ADD COLUMN IF NOT EXISTS active_since TIMESTAMPTZ;
 UPDATE nutrition_plans SET active_since = created_at
  WHERE is_active AND active_since IS NULL;
+
+-- 036: link de vídeo de execução por exercício (opcional).
+ALTER TABLE exercises
+    ADD COLUMN IF NOT EXISTS video_url TEXT;

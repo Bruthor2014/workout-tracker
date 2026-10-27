@@ -139,6 +139,8 @@ CREATE TABLE exercises (
     name          VARCHAR(150) NOT NULL,
     muscle_group  VARCHAR(100),
     image_url     TEXT,
+    -- Link de vídeo de execução (ex: YouTube), opcional.
+    video_url     TEXT,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_exercises_owner ON exercises(owner_id);

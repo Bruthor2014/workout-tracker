@@ -11,6 +11,7 @@ const {
   listCompletions,
   setCompletion,
   getCompletionSummary,
+  getCaloriesConsumedToday,
   setActivePlan,
   reorderPlans,
 } = require("../controllers/nutritionController");
@@ -26,6 +27,7 @@ const NOT_OWNER = requireRole("member", "personal_trainer", "nutritionist", "rec
 
 router.get("/", requireAuth, NOT_OWNER, listPlans);
 router.get("/completion-summary", requireAuth, NOT_OWNER, getCompletionSummary);
+router.get("/calories-today", requireAuth, NOT_OWNER, getCaloriesConsumedToday);
 // Antes de "/:id", senão "reorder" seria lido como um id.
 router.put("/reorder", requireAuth, NOT_OWNER, reorderPlans);
 router.post("/", requireAuth, NOT_OWNER, createPlan);

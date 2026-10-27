@@ -1629,6 +1629,35 @@
   transition: background 0.15s ease, color 0.15s ease;
 }
 
+/* Por baixo do botão de eliminar, no mesmo canto — este link é irmão do
+   <button> que escolhe o exercício (não pode ir dentro dele, um <a> não
+   pode estar dentro de outro elemento interativo), por isso a posição é
+   relativa ao cartão inteiro, não só à foto; "top" em vez de "bottom"
+   garante que fica sempre dentro da faixa da foto (que está sempre no
+   topo do cartão), em vez de cair em cima do nome por baixo. Abre o
+   vídeo de execução numa nova aba (ver ExercisePicker.jsx). */
+.exercise-option-video {
+  position: absolute;
+  top: 38px;
+  right: 6px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(10, 8, 20, 0.6);
+  color: var(--accent);
+  backdrop-filter: blur(4px);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.exercise-option-video:hover {
+  background: var(--accent);
+  color: #0a0b0c;
+}
+
 .exercise-option-delete:hover:not(:disabled) {
   background: var(--danger);
   color: white;
@@ -4006,6 +4035,17 @@
 
 /* Nota "X/Y refeições cumpridas este mês" — Dashboard e Perfil (ver
    NutritionCompletionNote.jsx). */
+.nutrition-note-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.nutrition-note-group .nutrition-note {
+  margin-bottom: 0;
+}
+
 .nutrition-note {
   display: inline-flex;
   align-items: center;
@@ -4180,6 +4220,18 @@
   margin-left: auto;
   font-size: 0.78rem;
   color: var(--text-secondary);
+}
+
+/* Estimativa de calorias da refeição (nplan-meal-header) — mesmo
+   alinhamento à direita que .nplan-meal-count; se os dois existirem na
+   mesma linha (refeição com várias opções), ficam lado a lado no mesmo
+   canto. */
+.nplan-meal-kcal {
+  margin-left: auto;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent-light);
+  white-space: nowrap;
 }
 
 .nplan-options {

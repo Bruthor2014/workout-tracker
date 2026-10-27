@@ -198,6 +198,43 @@ async function listRecords(req, res) {
   res.json(await queryRecords(req.user.id, Number(req.query.exclude_session) || null));
 }
 
+// MET único para todos os treinos (~6, esforço moderado) — não distingue
+// força de cardio nem intensidade real; é propositadamente uma estimativa
+// simples (gasto calórico por exercício não é ciência exata), nunca
+// apresentada como medição. calorias = MET × peso(kg) × duração(h).
+const WORKOUT_MET = 6;
+
+// GET /api/sessions/calories-today — calorias queimadas estimadas nos
+// treinos de hoje, a partir do peso corporal mais recente e da duração de
+// cada sessão cronometrada. Sessões sem cronómetro (started_at/ended_at a
+// NULL, registo manual/retroativo) ficam de fora — sem duração não há
+// base nenhuma para estimar, mesma regra de "nunca inventar" do resto do
+// projeto.
+async function getCaloriesBurnedToday(req, res) {
+  const weightResult = await pool.query(
+    `SELECT weight_kg FROM body_metrics WHERE member_id = $1 ORDER BY recorded_at DESC, created_at DESC LIMIT 1`,
+    [req.user.id]
+  );
+  const weightKg = weightResult.rows[0] ? Number(weightResult.rows[0].weight_kg) : null;
+
+  const sessionsResult = await pool.query(
+    `SELECT started_at, ended_at FROM workout_sessions
+      WHERE user_id = $1 AND performed_at = CURRENT_DATE
+        AND started_at IS NOT NULL AND ended_at IS NOT NULL`,
+    [req.user.id]
+  );
+
+  if (!weightKg || sessionsResult.rows.length === 0) {
+    return res.json({ calories: null, weight_kg: weightKg });
+  }
+
+  const totalHours = sessionsResult.rows.reduce(
+    (sum, row) => sum + (new Date(row.ended_at) - new Date(row.started_at)) / 3600000,
+    0
+  );
+  res.json({ calories: Math.round(WORKOUT_MET * weightKg * totalHours), weight_kg: weightKg });
+}
+
 // GET /api/sessions/exercise/:exerciseId/history — evolução de um exercício
 // ao longo do tempo: a série mais pesada de cada treino em que apareceu
 // (com peso igual, a de mais reps), por ordem cronológica — para um
@@ -274,6 +311,7 @@ module.exports = {
   updateSession,
   deleteSession,
   listRecords,
+  getCaloriesBurnedToday,
   listExerciseHistory,
   listSessionsForMember,
   listRecordsForMember,

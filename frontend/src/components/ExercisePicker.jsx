@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import Modal from "./Modal";
 import GlassCard from "./GlassCard";
 import Select from "./Select";
-import { IconCamera, IconChevronRight, IconPlusCircle, IconTrash } from "./Icons";
+import { IconCamera, IconChevronRight, IconPlay, IconPlusCircle, IconTrash } from "./Icons";
 import { muscleGroupVisual, MUSCLE_GROUP_NAMES } from "../utils/muscleGroups";
 import { apiRequest } from "../api/client";
 
@@ -18,6 +18,7 @@ const MUSCLE_GROUP_OPTIONS = MUSCLE_GROUP_NAMES.map((name) => ({
 function CreateExerciseForm({ onCreated, onCancel }) {
   const [name, setName] = useState("");
   const [muscleGroup, setMuscleGroup] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
   const [photo, setPhoto] = useState(null);
   const [preview, setPreview] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -44,6 +45,7 @@ function CreateExerciseForm({ onCreated, onCancel }) {
       const form = new FormData();
       form.append("name", name.trim());
       if (muscleGroup) form.append("muscle_group", muscleGroup);
+      if (videoUrl.trim()) form.append("video_url", videoUrl.trim());
       if (photo) form.append("photo", photo);
       const created = await apiRequest("/exercises", { method: "POST", body: form });
       onCreated(created);
@@ -89,6 +91,18 @@ function CreateExerciseForm({ onCreated, onCancel }) {
         options={MUSCLE_GROUP_OPTIONS}
         placeholder="Escolhe um grupo muscular..."
         ariaLabel="Tipo de exercício"
+      />
+
+      <label className="log-label" htmlFor="new-exercise-video" style={{ marginTop: 12 }}>
+        Link de vídeo de execução (opcional)
+      </label>
+      <input
+        id="new-exercise-video"
+        type="url"
+        className="glass-input"
+        value={videoUrl}
+        onChange={(e) => setVideoUrl(e.target.value)}
+        placeholder="Ex: https://youtube.com/..."
       />
 
       {error && <p className="error-text">{error}</p>}
@@ -283,6 +297,18 @@ export default function ExercisePicker({ exercises, value, onChange, onExerciseC
                             {ex.muscle_group && <span className="exercise-option-group">{ex.muscle_group}</span>}
                           </span>
                         </button>
+                        {ex.video_url && (
+                          <a
+                            href={ex.video_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="exercise-option-video"
+                            onClick={(e) => e.stopPropagation()}
+                            aria-label={`Ver vídeo de execução de ${ex.name}`}
+                          >
+                            <IconPlay size={14} />
+                          </a>
+                        )}
                         {canDelete && (
                           <button
                             type="button"
