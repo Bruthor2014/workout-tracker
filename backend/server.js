@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const compression = require("compression");
 const rateLimit = require("express-rate-limit");
+const multer = require("multer");
 
 const authRoutes = require("./routes/authRoutes");
 const exerciseRoutes = require("./routes/exerciseRoutes");
@@ -71,7 +72,22 @@ app.use("/api/occupancy", occupancyRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/friends", friendRoutes);
 
+// Mensagens de ficheiro (avatar, fotos de alimentos/exercícios — ver
+// middleware/upload.js) nunca chegavam ao utilizador: tanto o limite de
+// tamanho do multer como a mensagem já escrita no fileFilter para formato
+// inválido caíam sempre no "Erro interno do servidor" genérico abaixo.
+const MULTER_ERROR_MESSAGES = {
+  LIMIT_FILE_SIZE: "A foto é demasiado grande (máximo 8MB).",
+  LIMIT_UNEXPECTED_FILE: "Campo de ficheiro inesperado.",
+};
+
 app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({ message: MULTER_ERROR_MESSAGES[err.code] || "Não foi possível enviar o ficheiro." });
+  }
+  if (err.statusCode) {
+    return res.status(err.statusCode).json({ message: err.message });
+  }
   console.error(err);
   res.status(500).json({ message: "Erro interno do servidor." });
 });
