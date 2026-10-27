@@ -30,17 +30,71 @@ function contactsQuery(baseWhere, params) {
   );
 }
 
+// Quem segue ou é seguido por `me` (ver friendships/friendController.js) —
+// qualquer uma das direções chega para poder falar, não precisa de ser
+// mútuo. Mesma forma das outras listas de contactos (last_message/
+// unread_count), para dar para juntar tudo com mergeAndSort.
+async function friendRows(me) {
+  const result = await pool.query(
+    `SELECT ${CONTACT_COLS},
+            lm.body AS last_message, lm.created_at AS last_message_at,
+            lm.sender_id AS last_message_sender_id,
+            COALESCE(unread.count, 0) AS unread_count
+       FROM (
+         SELECT followee_id AS other_id FROM friendships WHERE follower_id = $1
+         UNION
+         SELECT follower_id AS other_id FROM friendships WHERE followee_id = $1
+       ) f
+       JOIN users u ON u.id = f.other_id
+       LEFT JOIN LATERAL (
+         SELECT body, created_at, sender_id FROM messages
+          WHERE (sender_id = u.id AND recipient_id = $1)
+             OR (sender_id = $1 AND recipient_id = u.id)
+          ORDER BY created_at DESC LIMIT 1
+       ) lm ON true
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*) AS count FROM messages
+          WHERE sender_id = u.id AND recipient_id = $1 AND read_at IS NULL
+       ) unread ON true`,
+    [me]
+  );
+  return result.rows;
+}
+
+// Junta várias listas de contactos (ginásio, clientes externos, amigos),
+// sem duplicar quem aparece em mais do que uma (ex: um amigo que também é
+// do mesmo ginásio), e ordena por conversa mais recente primeiro.
+function mergeAndSort(lists) {
+  const seen = new Set();
+  const merged = [];
+  for (const rows of lists) {
+    for (const row of rows) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      merged.push(row);
+    }
+  }
+  merged.sort((a, b) => {
+    if (!a.last_message_at && !b.last_message_at) return a.name.localeCompare(b.name);
+    if (!a.last_message_at) return 1;
+    if (!b.last_message_at) return -1;
+    return new Date(b.last_message_at) - new Date(a.last_message_at);
+  });
+  return merged;
+}
+
 // GET /api/messages/contacts — com quem é que este utilizador pode falar:
-// - Membro de ginásio: só vê staff do ginásio
-// - Coach (PT/nutricionista): vê toda a gente do ginásio + os seus clientes externos
-// - Cliente externo (gym_id = NULL): vê apenas os seus coaches
+// - Membro de ginásio: staff do ginásio + quem segue/o segue (amigos)
+// - Coach (PT/nutricionista): toda a gente do ginásio + clientes externos + amigos
+// - Cliente externo (gym_id = NULL): os seus coaches + amigos
 async function listContacts(req, res) {
   const isStaff = STAFF_ROLES.includes(req.user.role);
   const isCoach = req.user.role === "personal_trainer" || req.user.role === "nutritionist";
   const me = req.user.id;
+  const friends = await friendRows(me);
 
   if (!req.user.gymId) {
-    // Cliente externo: só vê os seus coaches.
+    // Cliente externo: os seus coaches + amigos.
     const result = await pool.query(
       `SELECT ${CONTACT_COLS},
               lm.body AS last_message, lm.created_at AS last_message_at,
@@ -58,11 +112,10 @@ async function listContacts(req, res) {
            SELECT COUNT(*) AS count FROM messages
             WHERE sender_id = u.id AND recipient_id = $1 AND read_at IS NULL
          ) unread ON true
-        WHERE ecc.client_id = $1
-        ORDER BY lm.created_at DESC NULLS LAST, u.name`,
+        WHERE ecc.client_id = $1`,
       [me]
     );
-    return res.json(result.rows);
+    return res.json(mergeAndSort([result.rows, friends]));
   }
 
   // Utilizador de ginásio: contactos do ginásio (filtrados por role se membro).
@@ -83,12 +136,11 @@ async function listContacts(req, res) {
           WHERE sender_id = u.id AND recipient_id = $2 AND read_at IS NULL
        ) unread ON true
       WHERE u.gym_id = $1 AND u.id != $2
-        AND ($3::boolean IS FALSE OR u.role != 'member')
-      ORDER BY lm.created_at DESC NULLS LAST, u.name`,
+        AND ($3::boolean IS FALSE OR u.role != 'member')`,
     [req.user.gymId, me, !isStaff]
   );
 
-  if (!isCoach) return res.json(gymRows.rows);
+  if (!isCoach) return res.json(mergeAndSort([gymRows.rows, friends]));
 
   // Coach: também inclui os clientes externos que não estão no ginásio.
   const extRows = await pool.query(
@@ -108,20 +160,11 @@ async function listContacts(req, res) {
          SELECT COUNT(*) AS count FROM messages
           WHERE sender_id = u.id AND recipient_id = $2 AND read_at IS NULL
        ) unread ON true
-      WHERE ecc.coach_id = $2
-      ORDER BY lm.created_at DESC NULLS LAST, u.name`,
+      WHERE ecc.coach_id = $2`,
     [req.user.gymId, me]
   );
 
-  const seen = new Set(gymRows.rows.map((r) => r.id));
-  const merged = [...gymRows.rows, ...extRows.rows.filter((r) => !seen.has(r.id))];
-  merged.sort((a, b) => {
-    if (!a.last_message_at && !b.last_message_at) return a.name.localeCompare(b.name);
-    if (!a.last_message_at) return 1;
-    if (!b.last_message_at) return -1;
-    return new Date(b.last_message_at) - new Date(a.last_message_at);
-  });
-  res.json(merged);
+  res.json(mergeAndSort([gymRows.rows, extRows.rows, friends]));
 }
 
 // GET /api/messages/:otherUserId — a conversa entre o utilizador autenticado
@@ -146,8 +189,10 @@ async function getThread(req, res) {
   res.json(result.rows);
 }
 
-// POST /api/messages/:otherUserId — enviar uma mensagem; só a pessoas do
-// mesmo ginásio, e um membro só pode escrever a staff (não a outro membro).
+// POST /api/messages/:otherUserId — enviar uma mensagem; mesmo ginásio,
+// ligação de coach↔cliente externo, OU amigos (quem segue/é seguido —
+// qualquer direção). Sem nenhuma dessas, um membro só pode escrever a
+// staff, nunca a outro membro.
 async function sendMessage(req, res) {
   const otherId = req.params.otherUserId;
   const { body } = req.body;
@@ -173,11 +218,18 @@ async function sendMessage(req, res) {
   );
   const hasExtLink = extLink.rows.length > 0;
 
-  if (!sameGym && !hasExtLink) {
+  const friendLink = await pool.query(
+    `SELECT 1 FROM friendships
+      WHERE (follower_id = $1 AND followee_id = $2) OR (follower_id = $2 AND followee_id = $1)`,
+    [req.user.id, otherId]
+  );
+  const isFriend = friendLink.rows.length > 0;
+
+  if (!sameGym && !hasExtLink && !isFriend) {
     return res.status(404).json({ message: "Destinatário não encontrado." });
   }
 
-  if (!isSenderStaff && !senderExternal && !hasExtLink && recipient.role === "member") {
+  if (!isSenderStaff && !senderExternal && !hasExtLink && !isFriend && recipient.role === "member") {
     return res.status(403).json({ message: "Só podes enviar mensagens a staff do ginásio." });
   }
 
