@@ -238,6 +238,52 @@ async function deleteGym(req, res) {
 }
 
 // GET /api/gym/users?q= — DONO pesquisa qualquer utilizador da plataforma.
+// GET /api/gym/registrations/stats — quantos utilizadores se registaram
+// esta semana/mês/ano/sempre, para o painel do DONO. Só a contagem — a
+// lista em si só se vai buscar ao clicar (ver listRegistrations), para não
+// carregar sempre todos os utilizadores à toa.
+async function getRegistrationStats(req, res) {
+  const result = await pool.query(
+    `SELECT
+       COUNT(*) FILTER (WHERE created_at >= date_trunc('week', CURRENT_DATE))::int AS week,
+       COUNT(*) FILTER (WHERE created_at >= date_trunc('month', CURRENT_DATE))::int AS month,
+       COUNT(*) FILTER (WHERE created_at >= date_trunc('year', CURRENT_DATE))::int AS year,
+       COUNT(*)::int AS all
+     FROM users
+    WHERE role <> 'dono'`
+  );
+  res.json(result.rows[0]);
+}
+
+// GET /api/gym/registrations?period=week|month|year|all — a lista em si,
+// mais recentes primeiro. `period` é validado contra uma lista fixa (nunca
+// vai para a query como texto do pedido) antes de escolher o fragmento SQL
+// correspondente, por isso não há risco de injeção apesar da concatenação.
+const REGISTRATION_PERIOD_SQL = {
+  week: "date_trunc('week', CURRENT_DATE)",
+  month: "date_trunc('month', CURRENT_DATE)",
+  year: "date_trunc('year', CURRENT_DATE)",
+  all: null,
+};
+
+async function listRegistrations(req, res) {
+  const period = req.query.period;
+  if (!Object.prototype.hasOwnProperty.call(REGISTRATION_PERIOD_SQL, period)) {
+    return res.status(400).json({ message: "period tem de ser week, month, year ou all." });
+  }
+  const sinceSql = REGISTRATION_PERIOD_SQL[period];
+  const result = await pool.query(
+    `SELECT u.id, u.name, u.email, u.role, u.gym_id, u.avatar_url, g.name AS gym_name, u.created_at
+       FROM users u
+       LEFT JOIN gyms g ON g.id = u.gym_id
+      WHERE u.role <> 'dono'
+        ${sinceSql ? `AND u.created_at >= ${sinceSql}` : ""}
+      ORDER BY u.created_at DESC
+      LIMIT 500`
+  );
+  res.json(result.rows);
+}
+
 async function searchUsers(req, res) {
   const q = (req.query.q || "").trim();
   if (q.length < 2) return res.json([]);
@@ -326,4 +372,17 @@ async function resetTheme(req, res) {
   res.json({ accent_color: null, secondary_color: null });
 }
 
-module.exports = { getOverview, listGyms, createGym, assignOwner, searchUsers, patchUser, getGymDetail, deleteGym, updateTheme, resetTheme };
+module.exports = {
+  getOverview,
+  listGyms,
+  createGym,
+  assignOwner,
+  searchUsers,
+  patchUser,
+  getGymDetail,
+  deleteGym,
+  updateTheme,
+  resetTheme,
+  getRegistrationStats,
+  listRegistrations,
+};

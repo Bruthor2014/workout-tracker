@@ -286,6 +286,102 @@ function GymDetailModal({ gymId, onClose, onDeleted, onChangeOwner }) {
   );
 }
 
+const REGISTRATION_PERIODS = [
+  { value: "week", label: "Esta semana" },
+  { value: "month", label: "Este mês" },
+  { value: "year", label: "Este ano" },
+  { value: "all", label: "Sempre" },
+];
+
+// Lista de quem se registou num período — só pedida ao clicar num dos
+// cartões (ver RegistrationStats), para não carregar sempre todos os
+// utilizadores da plataforma à toa.
+function RegistrationsModal({ period, onClose }) {
+  const [users, setUsers] = useState(null);
+  const [error, setError] = useState("");
+  const label = REGISTRATION_PERIODS.find((p) => p.value === period)?.label ?? period;
+
+  useEffect(() => {
+    apiRequest(`/gym/registrations?period=${period}`)
+      .then(setUsers)
+      .catch((err) => setError(err.message));
+  }, [period]);
+
+  return (
+    <Modal onClose={onClose}>
+      <GlassCard className="preview-card" strong style={{ minWidth: "min(420px, 100%)", maxWidth: 560, width: "90vw" }}>
+        <h3 style={{ margin: 0 }}>Registos — {label}</h3>
+        {error && <p className="error-text">{error}</p>}
+        {!error && users === null && <p className="text-secondary">A carregar...</p>}
+        {users && users.length === 0 && (
+          <p className="text-secondary" style={{ marginTop: 10 }}>Ninguém se registou neste período.</p>
+        )}
+        {users && users.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10, maxHeight: "60vh", overflowY: "auto" }}>
+            {users.map((u) => (
+              <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}>
+                <UserAvatar user={u} size={32} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</div>
+                  <div className="text-secondary" style={{ fontSize: "0.78rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {u.email}
+                  </div>
+                </div>
+                <span className="role-badge role-badge-static" style={{ flexShrink: 0, color: ROLE_COLORS[u.role] || "#94a3b8", background: `${ROLE_COLORS[u.role]}22` }}>
+                  {ROLE_LABELS[u.role] || u.role}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+          <button type="button" className="glass-button glass-button-secondary" onClick={onClose}>Fechar</button>
+        </div>
+      </GlassCard>
+    </Modal>
+  );
+}
+
+// Quantos utilizadores se registaram por período — cada cartão abre a
+// lista correspondente ao clicar (RegistrationsModal), em vez de já vir
+// tudo carregado.
+function RegistrationStats() {
+  const [stats, setStats] = useState(null);
+  const [viewingPeriod, setViewingPeriod] = useState(null);
+
+  useEffect(() => {
+    apiRequest("/gym/registrations/stats").then(setStats).catch(() => {});
+  }, []);
+
+  return (
+    <>
+      <div className="page-header" style={{ marginTop: 8 }}>
+        <div className="log-header">
+          <span className="log-header-icon"><IconUsers size={22} /></span>
+          <h2 style={{ fontSize: "1.3rem", margin: 0 }}>Registos</h2>
+        </div>
+      </div>
+      <div className="profile-stats" style={{ marginBottom: 20 }}>
+        {REGISTRATION_PERIODS.map((p) => (
+          <GlassCard
+            key={p.value}
+            className="stat-tile profile-stat profile-stat-clickable"
+            strong
+            role="button"
+            tabIndex={0}
+            onClick={() => setViewingPeriod(p.value)}
+            onKeyDown={(e) => e.key === "Enter" && setViewingPeriod(p.value)}
+          >
+            <span className="stat-tile-label">{p.label}</span>
+            <span className="stat-tile-value">{stats ? stats[p.value] : "–"}</span>
+          </GlassCard>
+        ))}
+      </div>
+      {viewingPeriod && <RegistrationsModal period={viewingPeriod} onClose={() => setViewingPeriod(null)} />}
+    </>
+  );
+}
+
 // ─── Main page ──────────────────────────────────────────────────────────────
 
 export default function DonoDashboard() {
@@ -412,6 +508,9 @@ export default function DonoDashboard() {
           ))}
         </div>
       )}
+
+      {/* ── Registos por período ── */}
+      <RegistrationStats />
 
       {/* ── Pesquisa de utilizadores ── */}
       <div className="page-header" style={{ marginTop: 8 }}>
