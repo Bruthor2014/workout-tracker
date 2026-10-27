@@ -270,11 +270,11 @@ export default function FriendsPage() {
               <GlassCard className="friends-link-card" strong style={{ marginTop: 16 }}>
                 <h3>
                   <IconTrophy size={16} /> Treino
-                  <InfoTooltip text="1 ponto por dia treinado — não conta peso levantado nem horas, só se treinaste ou não. 'Semana' é desde segunda-feira, reinicia toda semana." />
+                  <InfoTooltip text="1 dia treinado = 1 ponto. Não conta peso levantado nem horas, só se treinaste ou não. 'Semana' é desde segunda-feira, reinicia toda semana." />
                 </h3>
                 <RankingList
                   rows={ranking.training}
-                  metric={(row) => `${row.points} ${row.points === 1 ? "dia" : "dias"}`}
+                  metric={(row) => `${row.points} ${row.points === 1 ? "ponto" : "pontos"}`}
                   emptyText="Ninguém treinou ainda neste período."
                 />
               </GlassCard>
