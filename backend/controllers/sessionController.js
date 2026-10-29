@@ -1,4 +1,5 @@
 const pool = require("../db/pool");
+const { uploadImage } = require("../services/storage");
 
 // Técnicas de série aceites (ver frontend/src/utils/setTypes.js).
 const SET_TYPES = ["normal", "drop", "rest_pause", "cluster", "superset", "pyramid", "failure"];
@@ -304,6 +305,140 @@ async function deleteSession(req, res) {
   res.status(204).send();
 }
 
+// POST /api/sessions/:id/photo — foto opcional do treino (banner), para
+// aparecer no feed de amigos. Só o próprio dono do treino, e só depois de
+// já o ter registado (ver "Adicionar foto?" em LogWorkoutPage.jsx, logo
+// após guardar com sucesso).
+async function uploadSessionPhoto(req, res) {
+  if (!req.file) return res.status(400).json({ message: "Nenhuma foto enviada." });
+
+  const photoUrl = await uploadImage({
+    buffer: req.file.buffer,
+    mimetype: req.file.mimetype,
+    originalname: req.file.originalname,
+    folder: "sessions",
+    prefix: "session",
+    userId: req.user.id,
+  });
+
+  const result = await pool.query(
+    `UPDATE workout_sessions SET photo_url = $1 WHERE id = $2 AND user_id = $3 RETURNING id, photo_url`,
+    [photoUrl, req.params.id, req.user.id]
+  );
+  if (result.rows.length === 0) {
+    return res.status(404).json({ message: "Treino não encontrado." });
+  }
+  res.json(result.rows[0]);
+}
+
+// Dono do treino, ou amigo seu em qualquer direção — mesma regra de acesso
+// do feed (ver friendController.js/getFeed): quem vê o treino no feed é
+// quem pode reagir/comentar, nunca um desconhecido. Devolve o user_id do
+// dono (ou null se o treino não existir, já com o 404 escrito).
+async function findInteractableSession(req, res) {
+  const sessionId = Number(req.params.id);
+  const sessionResult = await pool.query(`SELECT user_id FROM workout_sessions WHERE id = $1`, [sessionId]);
+  const session = sessionResult.rows[0];
+  if (!session) {
+    res.status(404).json({ message: "Treino não encontrado." });
+    return null;
+  }
+
+  if (session.user_id !== req.user.id) {
+    const friendCheck = await pool.query(
+      `SELECT 1 FROM friendships WHERE (follower_id = $1 AND followee_id = $2) OR (follower_id = $2 AND followee_id = $1)`,
+      [req.user.id, session.user_id]
+    );
+    if (friendCheck.rows.length === 0) {
+      res.status(403).json({ message: "Só podes interagir com treinos de amigos." });
+      return null;
+    }
+  }
+  return sessionId;
+}
+
+// POST /api/sessions/:id/reaction — alterna (põe/tira) a reação (👏) do
+// próprio a um treino.
+async function toggleReaction(req, res) {
+  const sessionId = await findInteractableSession(req, res);
+  if (!sessionId) return;
+
+  const existing = await pool.query(`SELECT id FROM session_reactions WHERE session_id = $1 AND user_id = $2`, [
+    sessionId,
+    req.user.id,
+  ]);
+  if (existing.rows.length > 0) {
+    await pool.query(`DELETE FROM session_reactions WHERE id = $1`, [existing.rows[0].id]);
+  } else {
+    await pool.query(`INSERT INTO session_reactions (session_id, user_id) VALUES ($1, $2)`, [sessionId, req.user.id]);
+  }
+
+  const countResult = await pool.query(`SELECT COUNT(*)::int AS n FROM session_reactions WHERE session_id = $1`, [
+    sessionId,
+  ]);
+  res.json({ session_id: sessionId, reaction_count: countResult.rows[0].n, reacted: existing.rows.length === 0 });
+}
+
+// GET /api/sessions/:id/comments
+async function listComments(req, res) {
+  const sessionId = await findInteractableSession(req, res);
+  if (!sessionId) return;
+
+  const result = await pool.query(
+    `SELECT c.id, c.body, c.created_at, u.id AS user_id, u.name AS user_name, u.avatar_url AS user_avatar_url
+       FROM session_comments c
+       JOIN users u ON u.id = c.user_id
+      WHERE c.session_id = $1
+      ORDER BY c.created_at ASC`,
+    [sessionId]
+  );
+  res.json(
+    result.rows.map((r) => ({
+      id: r.id,
+      body: r.body,
+      created_at: r.created_at,
+      user: { id: r.user_id, name: r.user_name, avatar_url: r.user_avatar_url },
+    }))
+  );
+}
+
+// POST /api/sessions/:id/comments { body }
+async function addComment(req, res) {
+  const sessionId = await findInteractableSession(req, res);
+  if (!sessionId) return;
+
+  const body = req.body.body?.trim();
+  if (!body) return res.status(400).json({ message: "O comentário não pode estar vazio." });
+
+  const result = await pool.query(
+    `INSERT INTO session_comments (session_id, user_id, body)
+     VALUES ($1, $2, $3)
+     RETURNING id, body, created_at,
+       (SELECT name FROM users WHERE id = $2) AS user_name,
+       (SELECT avatar_url FROM users WHERE id = $2) AS user_avatar_url`,
+    [sessionId, req.user.id, body.slice(0, 1000)]
+  );
+  const row = result.rows[0];
+  res.status(201).json({
+    id: row.id,
+    body: row.body,
+    created_at: row.created_at,
+    user: { id: req.user.id, name: row.user_name, avatar_url: row.user_avatar_url },
+  });
+}
+
+// DELETE /api/sessions/:id/comments/:commentId — só quem o escreveu.
+async function deleteComment(req, res) {
+  const result = await pool.query(
+    `DELETE FROM session_comments WHERE id = $1 AND session_id = $2 AND user_id = $3 RETURNING id`,
+    [req.params.commentId, req.params.id, req.user.id]
+  );
+  if (result.rows.length === 0) {
+    return res.status(404).json({ message: "Comentário não encontrado." });
+  }
+  res.status(204).send();
+}
+
 module.exports = {
   listSessions,
   getSession,
@@ -315,4 +450,9 @@ module.exports = {
   listExerciseHistory,
   listSessionsForMember,
   listRecordsForMember,
+  uploadSessionPhoto,
+  toggleReaction,
+  listComments,
+  addComment,
+  deleteComment,
 };

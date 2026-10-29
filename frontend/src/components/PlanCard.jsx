@@ -1,15 +1,26 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import GlassCard from "./GlassCard";
-import NewPlanForm from "./NewPlanForm";
+import EditPlanInfoForm from "./EditPlanInfoForm";
 import PlanDayEditor from "./PlanDayEditor";
-import { IconDumbbell, IconPencil, IconPlay, IconPrinter, IconSave, IconTrash } from "./Icons";
-import { apiRequest } from "../api/client";
+import {
+  IconChevronRight,
+  IconDumbbell,
+  IconPencil,
+  IconPlay,
+  IconPlusCircle,
+  IconPrinter,
+  IconSave,
+  IconShare,
+  IconTrash,
+} from "./Icons";
+import SharePlanModal from "./SharePlanModal";
+import { apiRequest, resolveAssetUrl } from "../api/client";
 import { muscleGroupVisual, visualForMuscleGroups } from "../utils/muscleGroups";
 import { formatReps } from "../utils/reps";
 import { setTypeInfo } from "../utils/setTypes";
 import PlanCreator from "./PlanCreator";
-import { INVALID_REPS_MESSAGE, dayHasInvalidReps, dayToForm, formDayToApi } from "../utils/planDayForm";
+import { INVALID_REPS_MESSAGE, dayHasInvalidReps, dayToForm, emptyDay, formDayToApi } from "../utils/planDayForm";
 
 // "4 × 8–12" / "4 séries" / "8–12 reps" quando todas as séries têm o mesmo
 // alvo (o mais comum); senão lista cada série ("12×40kg · 10×50kg · 8×60kg"
@@ -69,10 +80,12 @@ function PlanExercise({ ex }) {
   );
 }
 
-// Edição de um só dia, no próprio lugar do dia no cartão — guarda só esse
-// dia (PUT /plans/:id/days/:dayId), sem mexer nos outros.
-function DayEditForm({ plan, day, exercises, records, onCancel, onSaved, onExerciseCreated, onExerciseDeleted }) {
-  const [draft, setDraft] = useState(() => dayToForm(day));
+// Edição de um só dia, no próprio lugar do dia no cartão (PUT
+// /plans/:id/days/:dayId) — ou, com `isNew`, criação de um dia a mais
+// ("Criar rotina", POST /plans/:id/days) sem mexer nos outros nem reescrever
+// o plano inteiro. `day` vem vazio (emptyDay()) quando `isNew`.
+function DayEditForm({ plan, day, isNew, exercises, records, onCancel, onSaved, onExerciseCreated, onExerciseDeleted }) {
+  const [draft, setDraft] = useState(() => (isNew ? day : dayToForm(day)));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -85,7 +98,11 @@ function DayEditForm({ plan, day, exercises, records, onCancel, onSaved, onExerc
     }
     setSaving(true);
     try {
-      await apiRequest(`/plans/${plan.id}/days/${day.id}`, { method: "PUT", body: formDayToApi(draft) });
+      if (isNew) {
+        await apiRequest(`/plans/${plan.id}/days`, { method: "POST", body: formDayToApi(draft) });
+      } else {
+        await apiRequest(`/plans/${plan.id}/days/${day.id}`, { method: "PUT", body: formDayToApi(draft) });
+      }
       onSaved();
     } catch (err) {
       setError(err.message);
@@ -110,7 +127,7 @@ function DayEditForm({ plan, day, exercises, records, onCancel, onSaved, onExerc
         </button>
         <button type="submit" className="glass-button log-save-button" disabled={saving}>
           <IconSave size={18} />
-          {saving ? "A guardar..." : "Guardar dia"}
+          {saving ? "A guardar..." : isNew ? "Criar rotina" : "Guardar dia"}
         </button>
       </div>
     </form>
@@ -119,19 +136,29 @@ function DayEditForm({ plan, day, exercises, records, onCancel, onSaved, onExerc
 
 // `editable` + `onChanged` são opcionais: quando omitidos o cartão fica só
 // de leitura. `exercises` só é preciso quando `editable` (alimenta o
-// seletor dos formulários de edição). "Editar" (plano inteiro) abre o
-// formulário completo no lugar do cartão; "Editar dia" só esse dia.
-// `canStart` mostra "Iniciar treino" em cada dia — só faz sentido nos
-// planos do próprio utilizador (o treino fica registado em nome de quem o
-// inicia).
-export default function PlanCard({ plan, exercises, records, editable: editableProp, canStart, onChanged, onExerciseCreated, onExerciseDeleted }) {
+// seletor dos formulários de edição). "Editar" só mexe no nome/descrição/
+// foto do plano (EditPlanInfoForm) — nunca nos dias, esses criam-se
+// ("Criar rotina") e editam-se ("Editar dia") um a um. `canStart` mostra
+// "Iniciar treino" em cada dia — só faz sentido nos planos do próprio
+// utilizador (o treino fica registado em nome de quem o inicia).
+// `onCollapse` (opcional): mostra um botão para fechar os detalhes e
+// voltar à linha fechada (PlanRow.jsx) — sem isto o cartão não tem como se
+// fechar (mesmo padrão de NutritionPlanCard.jsx).
+export default function PlanCard({ plan, exercises, records, editable: editableProp, canStart, onChanged, onCollapse, onExerciseCreated, onExerciseDeleted }) {
   const navigate = useNavigate();
   // Só quem criou o plano o pode alterar (o backend também o garante).
   const editable = editableProp && plan.can_edit;
   const [editing, setEditing] = useState(false);
+  // Cada dia começa fechado — só mostra nome + nº de exercícios até se
+  // clicar; "Iniciar treino"/"Editar dia" só aparecem depois de abrir esse
+  // dia (pedido explícito: "abres o plano de segunda e aí sim dá para
+  // iniciar"). Só um dia aberto de cada vez.
+  const [openDayId, setOpenDayId] = useState(null);
   const [editingDayId, setEditingDayId] = useState(null);
+  const [addingDay, setAddingDay] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
+  const [sharing, setSharing] = useState(false);
 
   async function handleDelete() {
     if (!window.confirm(`Eliminar o plano "${plan.name}"?`)) return;
@@ -148,31 +175,40 @@ export default function PlanCard({ plan, exercises, records, editable: editableP
 
   if (editing) {
     return (
-      <NewPlanForm
-        exercises={exercises}
-        records={records}
-        submitPath={`/plans/${plan.id}`}
-        method="PUT"
-        initialPlan={plan}
+      <EditPlanInfoForm
+        plan={plan}
         onCancel={() => setEditing(false)}
-        onCreated={() => {
+        onSaved={() => {
           setEditing(false);
           onChanged?.();
         }}
-        onExerciseCreated={onExerciseCreated}
-        onExerciseDeleted={onExerciseDeleted}
       />
     );
   }
 
   const exerciseCount = plan.days.reduce((sum, day) => sum + day.exercises.length, 0);
 
+  const photoUrl = resolveAssetUrl(plan.photo_url);
+
   return (
     <GlassCard className="nplan print-area">
+      {onCollapse && (
+        <div className="nplan-collapse-row">
+          <button type="button" className="nplan-collapse-corner" onClick={onCollapse} aria-label="Fechar plano">
+            <IconChevronRight size={18} />
+          </button>
+        </div>
+      )}
       <div className="nplan-header">
-        <span className="nplan-icon plan-icon">
-          <IconDumbbell size={24} />
-        </span>
+        {photoUrl ? (
+          <span className="nplan-icon plan-icon plan-cover-photo">
+            <img src={photoUrl} alt="" />
+          </span>
+        ) : (
+          <span className="nplan-icon plan-icon">
+            <IconDumbbell size={24} />
+          </span>
+        )}
         <div className="nplan-title">
           <h3>{plan.name}</h3>
           {plan.description && <p>{plan.description}</p>}
@@ -191,6 +227,12 @@ export default function PlanCard({ plan, exercises, records, editable: editableP
             <IconPrinter size={16} />
             Imprimir
           </button>
+          {canStart && plan.is_personal && (
+            <button type="button" className="nplan-action" onClick={() => setSharing(true)}>
+              <IconShare size={16} />
+              Partilhar
+            </button>
+          )}
           {editable && (
             <>
               <button type="button" className="nplan-action" onClick={() => setEditing(true)}>
@@ -213,7 +255,7 @@ export default function PlanCard({ plan, exercises, records, editable: editableP
 
       {error && <p className="error-text">{error}</p>}
 
-      <div className="nplan-meals">
+      <div className="nplan-meals plan-days-list">
         {plan.days.map((day) => {
           if (day.id === editingDayId) {
             return (
@@ -234,46 +276,90 @@ export default function PlanCard({ plan, exercises, records, editable: editableP
             );
           }
           const { icon: DayIcon, color } = visualForMuscleGroups(day.exercises.map((ex) => ex.muscle_group));
+          const dayOpen = day.id === openDayId;
           return (
             <section key={day.id} className="nplan-meal" style={{ "--meal-color": color }}>
-              <div className="nplan-meal-header">
+              <button
+                type="button"
+                className="nplan-meal-header nplan-meal-header-toggle"
+                onClick={() => setOpenDayId(dayOpen ? null : day.id)}
+                aria-expanded={dayOpen}
+              >
                 <span className="nplan-meal-icon">
-                  <DayIcon size={22} />
+                  <DayIcon size={15} />
                 </span>
-                <h4>{day.name}</h4>
-                <span className="nplan-meal-count">
-                  {day.exercises.length} {day.exercises.length === 1 ? "exercício" : "exercícios"}
+                <span className="nplan-meal-header-text">
+                  <h4>{day.name}</h4>
+                  <span className="nplan-meal-count">
+                    {day.exercises.length} {day.exercises.length === 1 ? "exercício" : "exercícios"}
+                  </span>
                 </span>
-              </div>
-              <ul className="nplan-foods">
-                {day.exercises.map((ex) => (
-                  <PlanExercise key={ex.id} ex={ex} />
-                ))}
-              </ul>
-              {(canStart || editable) && (
-                <div className="nplan-day-actions">
-                  {canStart && (
-                    <button
-                      type="button"
-                      className="nplan-start"
-                      onClick={() => navigate(`/log?plan=${plan.id}&day=${day.id}`)}
-                    >
-                      <IconPlay size={14} />
-                      Iniciar treino
-                    </button>
+                <span className="nplan-meal-chevron" style={{ transform: dayOpen ? "rotate(-90deg)" : "rotate(90deg)" }}>
+                  <IconChevronRight size={16} />
+                </span>
+              </button>
+              {dayOpen && (
+                <>
+                  <ul className="nplan-foods">
+                    {day.exercises.map((ex) => (
+                      <PlanExercise key={ex.id} ex={ex} />
+                    ))}
+                  </ul>
+                  {(canStart || editable) && (
+                    <div className="nplan-day-actions">
+                      {canStart && (
+                        <button
+                          type="button"
+                          className="nplan-start"
+                          onClick={() => navigate(`/log?plan=${plan.id}&day=${day.id}`)}
+                        >
+                          <IconPlay size={14} />
+                          Iniciar treino
+                        </button>
+                      )}
+                      {editable && (
+                        <button type="button" className="nplan-action" onClick={() => setEditingDayId(day.id)}>
+                          <IconPencil size={14} />
+                          Editar dia
+                        </button>
+                      )}
+                    </div>
                   )}
-                  {editable && (
-                    <button type="button" className="nplan-action" onClick={() => setEditingDayId(day.id)}>
-                      <IconPencil size={14} />
-                      Editar dia
-                    </button>
-                  )}
-                </div>
+                </>
               )}
             </section>
           );
         })}
+
+        {editable &&
+          (addingDay ? (
+            <section className="nplan-meal">
+              <DayEditForm
+                plan={plan}
+                day={emptyDay()}
+                isNew
+                exercises={exercises}
+                records={records}
+                onCancel={() => setAddingDay(false)}
+                onSaved={() => {
+                  setAddingDay(false);
+                  onChanged?.();
+                }}
+                onExerciseCreated={onExerciseCreated}
+                onExerciseDeleted={onExerciseDeleted}
+              />
+            </section>
+          ) : (
+            <button type="button" className="nplan-meal-add" onClick={() => setAddingDay(true)}>
+              <IconPlusCircle size={16} />
+              Criar rotina
+            </button>
+          ))}
       </div>
+
+      {sharing && (
+        <SharePlanModal planType="workout" planId={plan.id} planName={plan.name} onClose={() => setSharing(false)} />
+      )}
     </GlassCard>
   );
 }

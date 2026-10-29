@@ -1222,3 +1222,59 @@ UPDATE nutrition_plans SET active_since = created_at
 -- 036: link de vídeo de execução por exercício (opcional).
 ALTER TABLE exercises
     ADD COLUMN IF NOT EXISTS video_url TEXT;
+
+-- 037: partilha dirigida de planos (treino/nutrição) a um amigo específico.
+CREATE TABLE IF NOT EXISTS plan_shares (
+    id            SERIAL PRIMARY KEY,
+    plan_type     VARCHAR(10) NOT NULL CHECK (plan_type IN ('workout', 'nutrition')),
+    plan_id       INTEGER NOT NULL,
+    plan_name     VARCHAR(150) NOT NULL,
+    from_user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    to_user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status        VARCHAR(10) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'copied', 'dismissed')),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    responded_at  TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_plan_shares_to_user ON plan_shares(to_user_id, status);
+
+-- 038: a partilha de plano também cria uma mensagem normal na conversa.
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS plan_share_id INTEGER REFERENCES plan_shares(id) ON DELETE SET NULL;
+
+-- 039: foto opcional do treino (banner) + reações (👏) no feed.
+ALTER TABLE workout_sessions ADD COLUMN IF NOT EXISTS photo_url TEXT;
+CREATE TABLE IF NOT EXISTS session_reactions (
+    id          SERIAL PRIMARY KEY,
+    session_id  INTEGER NOT NULL REFERENCES workout_sessions(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (session_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_session_reactions_session ON session_reactions(session_id);
+
+-- 040: comentários (texto) num treino de um amigo no feed.
+CREATE TABLE IF NOT EXISTS session_comments (
+    id          SERIAL PRIMARY KEY,
+    session_id  INTEGER NOT NULL REFERENCES workout_sessions(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body        TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_session_comments_session ON session_comments(session_id, created_at);
+
+-- 041: equipamento por exercício (filtro) + favoritos no seletor.
+ALTER TABLE exercises ADD COLUMN IF NOT EXISTS equipment VARCHAR(20)
+    CHECK (equipment IN ('barra', 'halteres', 'cabo', 'maquina', 'peso_corporal', 'kettlebell', 'elastico', 'outro'));
+CREATE TABLE IF NOT EXISTS exercise_favorites (
+    id           SERIAL PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    exercise_id  INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (user_id, exercise_id)
+);
+CREATE INDEX IF NOT EXISTS idx_exercise_favorites_user ON exercise_favorites(user_id);
+
+-- 042: ordem dos planos de treino na lista colapsada.
+ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS order_index INTEGER NOT NULL DEFAULT 0;
+
+-- 043: foto de capa opcional do plano de treino.
+ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS photo_url TEXT;

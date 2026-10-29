@@ -1,18 +1,15 @@
 import { useEffect, useState } from "react";
 import { IconApple, IconFlame } from "./Icons";
+import InfoTooltip from "./InfoTooltip";
 import { apiRequest } from "../api/client";
 
 // Nota "10/12 refeições cumpridas este mês" (plano ATIVO) + calorias de
 // hoje, consumidas (refeições já marcadas hoje, GET .../calories-today) e
 // queimadas (estimativa a partir dos treinos de hoje, GET
 // /sessions/calories-today) — duas linhas SEPARADAS de propósito, nunca um
-// saldo combinado (pedido explícito: não juntar diretamente).
-//
-// Quando falta um pré-requisito (peso corporal nunca registado, ou
-// nenhuma quantidade em gramas nas refeições cumpridas), mostra uma dica a
-// dizer porquê em vez de esconder a linha sem explicação — descobriu-se
-// que, sem isto, parecia que "as calorias não estavam a ser registadas"
-// quando na realidade faltava só uma coisa de preencher.
+// saldo combinado. Texto mínimo: quando falta um pré-requisito (peso
+// corporal, ou quantidade em gramas nas refeições), não explica em texto
+// — só um InfoTooltip (mesmo padrão do Ranking) com a explicação curta.
 export default function NutritionCompletionNote() {
   const [summary, setSummary] = useState(null);
   const [calories, setCalories] = useState(null);
@@ -27,29 +24,17 @@ export default function NutritionCompletionNote() {
     ]).then(([consumed, burned]) => {
       setCalories({
         consumed: consumed?.calories ?? null,
-        consumedItemsCounted: consumed?.items_counted ?? 0,
-        consumedItemsTotal: consumed?.items_total ?? 0,
+        consumedIncomplete: consumed && consumed.items_total > 0 && consumed.items_counted < consumed.items_total,
         burned: burned?.calories ?? null,
-        // weight_kg vem sempre no corpo da resposta, mesmo quando
-        // calories fica null — é o que distingue "sem treino hoje"
-        // (nada a mostrar, normal) de "falta registar o peso" (vale a
-        // pena avisar, é o pré-requisito que falta).
         hasWeight: burned ? burned.weight_kg != null : null,
       });
     });
   }, []);
 
-  const consumedAllExcluded =
-    calories && calories.consumed === 0 && calories.consumedItemsTotal > 0 && calories.consumedItemsCounted === 0;
-  const consumedPartial =
-    calories &&
-    calories.consumedItemsTotal > 0 &&
-    calories.consumedItemsCounted > 0 &&
-    calories.consumedItemsCounted < calories.consumedItemsTotal;
-  const showMissingWeightHint = calories && calories.burned == null && calories.hasWeight === false;
-  const hasCalories = calories && (calories.consumed != null || calories.burned != null || showMissingWeightHint);
-
-  if (!summary && !hasCalories) return null;
+  const missingWeight = calories && calories.burned == null && calories.hasWeight === false;
+  const showBurned = calories && (calories.burned != null || missingWeight);
+  const showConsumed = calories && calories.consumed != null;
+  if (!summary && !showBurned && !showConsumed) return null;
 
   return (
     <div className="nutrition-note-group">
@@ -66,27 +51,27 @@ export default function NutritionCompletionNote() {
           </span>
         </div>
       )}
-      {hasCalories && (
+      {(showBurned || showConsumed) && (
         <div className="nutrition-note">
           <span className="nutrition-note-icon">
             <IconFlame size={18} />
           </span>
           <span>
-            {calories.burned != null && (
+            {showBurned && (
               <>
-                <strong>{calories.burned}</strong> kcal queimadas hoje (estimativa)
+                {calories.burned != null ? <strong>{calories.burned} kcal</strong> : "— kcal"} queimadas hoje
+                <InfoTooltip text="Tens de registar o teu peso em Composição corporal para calcular as calorias queimadas." />
               </>
             )}
-            {showMissingWeightHint && "Regista o teu peso em Composição corporal para veres as calorias queimadas"}
-            {(calories.burned != null || showMissingWeightHint) && calories.consumed != null && " · "}
-            {calories.consumed != null && !consumedAllExcluded && (
+            {showBurned && showConsumed && " · "}
+            {showConsumed && (
               <>
-                <strong>{calories.consumed}</strong> kcal consumidas hoje
-                {consumedPartial && " (incompleto — só itens com quantidade em gramas)"}
+                <strong>{calories.consumed} kcal</strong> consumidas hoje
+                {calories.consumedIncomplete && (
+                  <InfoTooltip text="Só conta alimentos com quantidade em gramas (ex: '150g')." />
+                )}
               </>
             )}
-            {consumedAllExcluded &&
-              "Define a quantidade em gramas (ex: \"150g\") nos alimentos para veres as calorias consumidas"}
           </span>
         </div>
       )}

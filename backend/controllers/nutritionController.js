@@ -652,4 +652,8 @@ module.exports = {
   setCompletion,
   setActivePlan,
   reorderPlans,
+  // Reutilizados por planShareController.js para copiar um plano pessoal
+  // partilhado para a conta de quem o recebeu.
+  fetchPlanById,
+  insertPlan,
 };

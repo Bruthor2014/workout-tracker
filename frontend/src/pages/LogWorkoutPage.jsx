@@ -114,6 +114,14 @@ export default function LogWorkoutPage() {
   const [loadingSession, setLoadingSession] = useState(isEditing);
   const navigate = useNavigate();
 
+  // Depois de criar o treino (não ao editar), oferece-se uma foto opcional
+  // antes de ir para o dashboard — aparece no feed de amigos (ver
+  // FriendsPage.jsx). `savedSessionId` != null é o que mostra este passo.
+  const [savedSessionId, setSavedSessionId] = useState(null);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+
   const [activeStart, setActiveStart] = useState(null);
 
   // Recorde (maior peso) de cada exercício: exercise_id -> { weight, reps,
@@ -305,15 +313,65 @@ export default function LogWorkoutPage() {
 
       if (isEditing) {
         await apiRequest(`/sessions/${id}`, { method: "PUT", body });
+        navigate("/dashboard");
       } else {
-        await apiRequest("/sessions", { method: "POST", body });
+        const created = await apiRequest("/sessions", { method: "POST", body });
+        setSavedSessionId(created.id);
       }
-      navigate("/dashboard");
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleUploadPhoto() {
+    if (!photoFile) return;
+    setUploadingPhoto(true);
+    setPhotoError("");
+    try {
+      const form = new FormData();
+      form.append("photo", photoFile);
+      await apiRequest(`/sessions/${savedSessionId}/photo`, { method: "POST", body: form });
+      navigate("/dashboard");
+    } catch (err) {
+      setPhotoError(err.message);
+      setUploadingPhoto(false);
+    }
+  }
+
+  if (savedSessionId) {
+    return (
+      <div className="page-container log-page">
+        <GlassCard className="log-card log-photo-step" strong>
+          <h2>Treino guardado!</h2>
+          <p className="text-secondary">
+            Queres adicionar uma foto? Aparece no feed para os teus amigos verem.
+          </p>
+          {photoFile && (
+            <img className="log-photo-preview" src={URL.createObjectURL(photoFile)} alt="Pré-visualização" />
+          )}
+          <label className="glass-button glass-button-secondary log-photo-pick">
+            {photoFile ? "Trocar foto" : "Escolher foto"}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
+              hidden
+            />
+          </label>
+          {photoError && <p className="error-text">{photoError}</p>}
+          <div className="form-actions">
+            <button type="button" className="glass-button glass-button-secondary" onClick={() => navigate("/dashboard")}>
+              Saltar
+            </button>
+            <button type="button" className="glass-button" onClick={handleUploadPhoto} disabled={!photoFile || uploadingPhoto}>
+              {uploadingPhoto ? "A enviar..." : "Guardar foto"}
+            </button>
+          </div>
+        </GlassCard>
+      </div>
+    );
   }
 
   if (loadingSession) {

@@ -494,6 +494,107 @@ async function getRanking(req, res) {
   res.json({ period, training, nutrition });
 }
 
+// GET /api/friends/feed?before=<id da sessão mais antiga já recebida>&limit=20
+// — os próprios treinos + os de quem se segue, por ordem cronológica
+// inversa, todos juntos (tal como um feed de rede social normal — os
+// próprios posts aparecem lá também, não é só "ver os dos outros"). Mesmo
+// modelo de acesso do resumo/comparação (seguir dá acesso imediato, sem
+// pedido à parte). Paginado por cursor (id), não por número de página,
+// para não saltar nem repetir linhas se alguém publicar um treino novo a
+// meio da pessoa percorrer a lista.
+async function getFeed(req, res) {
+  const followingResult = await pool.query(`SELECT followee_id FROM friendships WHERE follower_id = $1`, [
+    req.user.id,
+  ]);
+  const feedUserIds = [req.user.id, ...followingResult.rows.map((r) => r.followee_id)];
+
+  const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+  const before = req.query.before ? Number(req.query.before) : null;
+
+  const result = await pool.query(
+    `SELECT s.id, s.title, s.performed_at, s.started_at, s.ended_at, s.photo_url, s.created_at,
+            u.id AS user_id, u.name AS user_name, u.avatar_url AS user_avatar_url,
+            COUNT(DISTINCT sl.exercise_id)::int AS exercise_count,
+            COUNT(sl.id)::int AS set_count,
+            COALESCE(SUM(sl.reps * sl.weight) FILTER (WHERE ex.muscle_group IS DISTINCT FROM 'Cardio'), 0) AS total_weight_kg,
+            mg.muscle_groups,
+            exl.exercises,
+            COALESCE(reac.n, 0) AS reaction_count,
+            COALESCE(reac.reacted, false) AS reacted_by_me,
+            COALESCE(cm.n, 0) AS comment_count
+       FROM workout_sessions s
+       JOIN users u ON u.id = s.user_id
+       LEFT JOIN set_logs sl ON sl.session_id = s.id
+       LEFT JOIN exercises ex ON ex.id = sl.exercise_id
+       LEFT JOIN LATERAL (
+         SELECT STRING_AGG(g.muscle_group, ' • ' ORDER BY g.set_count DESC, g.muscle_group) AS muscle_groups
+           FROM (
+             SELECT e.muscle_group, COUNT(*) AS set_count
+               FROM set_logs sl2
+               JOIN exercises e ON e.id = sl2.exercise_id
+              WHERE sl2.session_id = s.id AND e.muscle_group IS NOT NULL
+              GROUP BY e.muscle_group
+           ) g
+       ) mg ON true
+       -- Exercícios feitos (nome, foto, grupo muscular, nº de séries), pela
+       -- ordem em que foram registados — o feed mostra o treino tal como
+       -- aparece ao registá-lo (ver WorkoutExerciseBlock.jsx), não só uma
+       -- contagem.
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(
+                  jsonb_build_object(
+                    'exercise_id', x.exercise_id, 'name', x.name, 'image_url', x.image_url,
+                    'muscle_group', x.muscle_group, 'set_count', x.set_count
+                  ) ORDER BY x.first_set
+                ) AS exercises
+           FROM (
+             SELECT e.id AS exercise_id, e.name, e.image_url, e.muscle_group,
+                    COUNT(*) AS set_count, MIN(sl3.id) AS first_set
+               FROM set_logs sl3
+               JOIN exercises e ON e.id = sl3.exercise_id
+              WHERE sl3.session_id = s.id
+              GROUP BY e.id, e.name, e.image_url, e.muscle_group
+           ) x
+       ) exl ON true
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS n, bool_or(sr.user_id = $4) AS reacted
+           FROM session_reactions sr
+          WHERE sr.session_id = s.id
+       ) reac ON true
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS n FROM session_comments c WHERE c.session_id = s.id
+       ) cm ON true
+      WHERE s.user_id = ANY($1::int[])
+        AND ($2::int IS NULL OR s.id < $2)
+      GROUP BY s.id, u.id, mg.muscle_groups, exl.exercises, reac.n, reac.reacted, cm.n
+      ORDER BY s.id DESC
+      LIMIT $3`,
+    [feedUserIds, before, limit + 1, req.user.id]
+  );
+
+  const hasMore = result.rows.length > limit;
+  const sessions = result.rows.slice(0, limit).map((r) => ({
+    id: r.id,
+    title: r.title,
+    performed_at: r.performed_at,
+    started_at: r.started_at,
+    ended_at: r.ended_at,
+    photo_url: r.photo_url,
+    created_at: r.created_at,
+    exercise_count: r.exercise_count,
+    set_count: r.set_count,
+    total_weight_kg: Math.round(Number(r.total_weight_kg)),
+    muscle_groups: r.muscle_groups,
+    exercises: r.exercises || [],
+    reaction_count: r.reaction_count,
+    reacted_by_me: r.reacted_by_me,
+    comment_count: r.comment_count,
+    is_mine: r.user_id === req.user.id,
+    user: { id: r.user_id, name: r.user_name, avatar_url: r.user_avatar_url },
+  }));
+  res.json({ sessions, has_more: hasMore });
+}
+
 module.exports = {
   getMyCode,
   previewCode,
@@ -506,4 +607,5 @@ module.exports = {
   getSummary,
   getCompare,
   getRanking,
+  getFeed,
 };

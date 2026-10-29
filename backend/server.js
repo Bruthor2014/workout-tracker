@@ -24,6 +24,7 @@ const financeRoutes = require("./routes/financeRoutes");
 const occupancyRoutes = require("./routes/occupancyRoutes");
 const attendanceRoutes = require("./routes/attendanceRoutes");
 const friendRoutes = require("./routes/friendRoutes");
+const planShareRoutes = require("./routes/planShareRoutes");
 const { startClassChecker } = require("./services/classChecker");
 const { startSubscriptionReminders } = require("./services/subscriptionNotify");
 
@@ -71,6 +72,7 @@ app.use("/api/finance", financeRoutes);
 app.use("/api/occupancy", occupancyRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/friends", friendRoutes);
+app.use("/api/plan-shares", planShareRoutes);
 
 // Mensagens de ficheiro (avatar, fotos de alimentos/exercícios — ver
 // middleware/upload.js) nunca chegavam ao utilizador: tanto o limite de

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import GlassCard from "../components/GlassCard";
 import BroadcastModal from "../components/BroadcastModal";
-import { IconChevronRight } from "../components/Icons";
+import { IconChevronRight, IconShare } from "../components/Icons";
+import PlanPreviewModal from "../components/PlanPreviewModal";
 import { apiRequest, resolveAssetUrl } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { ROLE_LABELS } from "../utils/roles";
@@ -15,6 +16,72 @@ function ContactAvatar({ contact }) {
     <span className="member-card-avatar member-card-avatar-fallback">
       {contact.name.charAt(0).toUpperCase()}
     </span>
+  );
+}
+
+const PLAN_SHARE_LABEL = { workout: "Plano de treino", nutrition: "Plano de nutrição" };
+
+// Mensagem especial criada quando alguém partilha um plano (ver
+// POST /plan-shares em planShareController.js — cria a `messages` ligada
+// via plan_share_id). "Ver plano" abre o plano inteiro só de leitura
+// (PlanPreviewModal); copiar é uma ação explícita lá dentro, nunca às
+// ciegas só por ter chegado a mensagem — "ver e usar se quiser", não
+// "aceitar".
+function PlanShareBubble({ msg, isMine, onResolved }) {
+  const [dismissing, setDismissing] = useState(false);
+  const [error, setError] = useState("");
+  const [previewing, setPreviewing] = useState(false);
+
+  async function dismiss() {
+    setDismissing(true);
+    setError("");
+    try {
+      await apiRequest(`/plan-shares/${msg.plan_share_id}/dismiss`, { method: "POST" });
+      onResolved();
+    } catch (err) {
+      setError(err.message);
+      setDismissing(false);
+    }
+  }
+
+  return (
+    <div className="plan-share-bubble">
+      <div className="plan-share-bubble-header">
+        <IconShare size={14} />
+        <span>{PLAN_SHARE_LABEL[msg.plan_share_type] || "Plano"}</span>
+      </div>
+      <p className="plan-share-bubble-name">"{msg.plan_share_name}"</p>
+
+      {!isMine && (
+        <div className="plan-share-bubble-actions">
+          <button type="button" className="glass-button" onClick={() => setPreviewing(true)}>
+            Ver plano
+          </button>
+          {msg.plan_share_status === "pending" && (
+            <button
+              type="button"
+              className="glass-button glass-button-secondary"
+              disabled={dismissing}
+              onClick={dismiss}
+            >
+              {dismissing ? "..." : "Dispensar"}
+            </button>
+          )}
+        </div>
+      )}
+      {isMine && msg.plan_share_status === "pending" && <span className="plan-share-bubble-status">Pendente</span>}
+      {msg.plan_share_status === "copied" && <span className="plan-share-bubble-status copied">Copiado ✓</span>}
+      {msg.plan_share_status === "dismissed" && <span className="plan-share-bubble-status">Dispensado</span>}
+      {error && <span className="error-text">{error}</span>}
+
+      {previewing && (
+        <PlanPreviewModal
+          shareId={msg.plan_share_id}
+          onClose={() => setPreviewing(false)}
+          onChanged={onResolved}
+        />
+      )}
+    </div>
   );
 }
 
@@ -190,15 +257,22 @@ export default function MessagesPage() {
                 {!loadingThread &&
                   (() => {
                     const lastMineId = [...thread].reverse().find((m) => m.sender_id === user.id)?.id;
-                    return thread.map((msg) => (
-                      <div key={msg.id} className={`message-bubble${msg.sender_id === user.id ? " mine" : ""}`}>
-                        <p>{msg.body}</p>
-                        <span>
-                          {formatTimestamp(msg.created_at)}
-                          {msg.id === lastMineId && msg.read_at && " · Visto"}
-                        </span>
-                      </div>
-                    ));
+                    return thread.map((msg) => {
+                      const isMine = msg.sender_id === user.id;
+                      return (
+                        <div key={msg.id} className={`message-bubble${isMine ? " mine" : ""}${msg.plan_share_id ? " has-plan-share" : ""}`}>
+                          {msg.plan_share_id ? (
+                            <PlanShareBubble msg={msg} isMine={isMine} onResolved={() => loadThread(selectedId)} />
+                          ) : (
+                            <p>{msg.body}</p>
+                          )}
+                          <span>
+                            {formatTimestamp(msg.created_at)}
+                            {msg.id === lastMineId && msg.read_at && " · Visto"}
+                          </span>
+                        </div>
+                      );
+                    });
                   })()}
                 <div ref={bottomRef} />
               </div>

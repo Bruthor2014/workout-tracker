@@ -1,4 +1,5 @@
 const pool = require("../db/pool");
+const { uploadImage } = require("../services/storage");
 
 async function attachDaysToPlans(plans) {
   if (plans.length === 0) return [];
@@ -82,7 +83,7 @@ async function attachDaysToPlans(plans) {
 // `viewer` (req.user) é quem está a ver: decide o `can_edit` de cada plano.
 async function fetchPlansForMember(memberId, viewer) {
   const plansResult = await pool.query(
-    `SELECT wp.id, wp.name, wp.description, wp.created_at, wp.created_by,
+    `SELECT wp.id, wp.name, wp.description, wp.created_at, wp.created_by, wp.order_index, wp.photo_url,
             cu.name AS created_by_name, cu.role AS created_by_role,
             -- Pessoal = criado pelo próprio membro. created_by NULL = criado por
             -- alguém que já saiu do ginásio (continua a ser um plano do staff).
@@ -95,7 +96,7 @@ async function fetchPlansForMember(memberId, viewer) {
        FROM workout_plans wp
        LEFT JOIN users cu ON cu.id = wp.created_by
       WHERE wp.member_id = $1
-      ORDER BY wp.created_at DESC`,
+      ORDER BY wp.order_index, wp.created_at DESC`,
     [memberId, viewer.id, viewer.role, viewer.gymId]
   );
   return attachDaysToPlans(plansResult.rows);
@@ -103,7 +104,7 @@ async function fetchPlansForMember(memberId, viewer) {
 
 async function fetchPlanById(planId, viewer) {
   const planResult = await pool.query(
-    `SELECT wp.id, wp.name, wp.description, wp.created_at, wp.created_by,
+    `SELECT wp.id, wp.name, wp.description, wp.created_at, wp.created_by, wp.order_index, wp.photo_url,
             cu.name AS created_by_name, cu.role AS created_by_role,
             -- Pessoal = criado pelo próprio membro. created_by NULL = criado por
             -- alguém que já saiu do ginásio (continua a ser um plano do staff).
@@ -165,9 +166,11 @@ async function insertPlan(memberId, createdBy, { name, description, days }) {
   try {
     await client.query("BEGIN");
 
+    // Vai sempre para o fim da lista do membro (mesma ideia de
+    // nutrition_plans.order_index).
     const planResult = await client.query(
-      `INSERT INTO workout_plans (member_id, created_by, name, description)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO workout_plans (member_id, created_by, name, description, order_index)
+       VALUES ($1, $2, $3, $4, COALESCE((SELECT max(order_index) + 1 FROM workout_plans WHERE member_id = $1), 0))
        RETURNING id`,
       [memberId, createdBy, name, description || null]
     );
@@ -347,6 +350,73 @@ async function updatePlanDay(req, res) {
   res.json(await fetchPlanById(plan.id, req.user));
 }
 
+// POST /api/plans/:id/days — acrescenta UM dia novo ao plano ("Criar
+// rotina" em PlanCard.jsx), sem mexer nos dias já existentes nem obrigar a
+// reescrever o plano inteiro. Vai sempre para o fim (mesma ideia de
+// insertDaysAndExercises, mas só para um dia).
+async function addPlanDay(req, res) {
+  const plan = await findPlanWithAccess(req, res);
+  if (!plan) return;
+  const message = dayError(req.body);
+  if (message) return res.status(400).json({ message });
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const maxResult = await client.query(`SELECT COALESCE(MAX(order_index), -1) AS max FROM plan_days WHERE plan_id = $1`, [
+      plan.id,
+    ]);
+    const dayResult = await client.query(
+      `INSERT INTO plan_days (plan_id, name, order_index) VALUES ($1, $2, $3) RETURNING id`,
+      [plan.id, req.body.name, maxResult.rows[0].max + 1]
+    );
+    await insertDayExercises(client, dayResult.rows[0].id, req.body.exercises);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  res.status(201).json(await fetchPlanById(plan.id, req.user));
+}
+
+// PATCH /api/plans/:id/info — só nome, descrição e foto de capa (nunca os
+// dias — esses editam-se um a um com updatePlanDay/addPlanDay, ou criam-se
+// de novo). Pedido explícito: "Editar" deixa de reescrever o plano inteiro.
+async function updatePlanInfo(req, res) {
+  const plan = await findPlanWithAccess(req, res);
+  if (!plan) return;
+
+  const { name, description, remove_photo } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ message: "O nome é obrigatório." });
+  }
+
+  const currentResult = await pool.query(`SELECT photo_url FROM workout_plans WHERE id = $1`, [plan.id]);
+  let photoUrl = currentResult.rows[0].photo_url;
+  if (req.file) {
+    photoUrl = await uploadImage({
+      buffer: req.file.buffer,
+      mimetype: req.file.mimetype,
+      originalname: req.file.originalname,
+      folder: "plans",
+      prefix: "plan",
+      userId: req.user.id,
+    });
+  } else if (remove_photo === "true") {
+    photoUrl = null;
+  }
+
+  const result = await pool.query(
+    `UPDATE workout_plans SET name = $1, description = $2, photo_url = $3 WHERE id = $4
+     RETURNING id, name, description, photo_url`,
+    [name.trim(), description || null, photoUrl, plan.id]
+  );
+  res.json(result.rows[0]);
+}
+
 // DELETE /api/plans/:id — eliminar um plano (dono ou staff do mesmo ginásio)
 async function deletePlan(req, res) {
   const plan = await findPlanWithAccess(req, res);
@@ -356,6 +426,48 @@ async function deletePlan(req, res) {
   res.status(204).send();
 }
 
+// PUT /api/plans/reorder — body: { order: [planId, ...] }, a nova ordem
+// completa dos planos do próprio (arrastar na lista — ver PlansPage.jsx).
+// Tem de incluir exatamente os planos que já tinha, nem mais nem menos —
+// sem isto dava para "roubar" um plano de outra pessoa só por lhe saber o
+// id. Mesmo padrão de nutritionController.js/reorderPlans.
+async function reorderPlans(req, res) {
+  const order = req.body.order;
+  if (!Array.isArray(order) || order.some((id) => !Number.isInteger(id))) {
+    return res.status(400).json({ message: "order tem de ser uma lista de ids." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const ownResult = await client.query(`SELECT id FROM workout_plans WHERE member_id = $1`, [req.user.id]);
+    const ownIds = new Set(ownResult.rows.map((r) => r.id));
+    const orderIds = new Set(order);
+    const sameSet =
+      orderIds.size === order.length && orderIds.size === ownIds.size && order.every((id) => ownIds.has(id));
+    if (!sameSet) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: "A lista tem de incluir exatamente os teus planos atuais." });
+    }
+
+    for (let i = 0; i < order.length; i++) {
+      await client.query(`UPDATE workout_plans SET order_index = $1 WHERE id = $2 AND member_id = $3`, [
+        i,
+        order[i],
+        req.user.id,
+      ]);
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  res.json(await fetchPlansForMember(req.user.id, req.user));
+}
+
 module.exports = {
   listPlans,
   createPlan,
@@ -363,5 +475,12 @@ module.exports = {
   createPlanForMember,
   updatePlan,
   updatePlanDay,
+  addPlanDay,
+  updatePlanInfo,
   deletePlan,
+  reorderPlans,
+  // Reutilizados por planShareController.js para copiar um plano pessoal
+  // partilhado para a conta de quem o recebeu.
+  fetchPlanById,
+  insertPlan,
 };

@@ -487,3 +487,12 @@ export function IconTrophy({ size = 24, className }) {
     </svg>
   );
 }
+
+// `filled` = favorito marcado (preenchido); sem isso, só o contorno.
+export function IconBookmark({ size = 24, className, filled = false }) {
+  return (
+    <svg {...base} width={size} height={size} className={className} fill={filled ? "currentColor" : "none"}>
+      <path d="M6 4h12v16l-6-4-6 4z" />
+    </svg>
+  );
+}

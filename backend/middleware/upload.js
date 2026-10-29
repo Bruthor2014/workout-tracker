@@ -33,5 +33,7 @@ function imageUpload() {
 const uploadAvatar = imageUpload();
 const uploadFoodPhoto = imageUpload();
 const uploadExercisePhoto = imageUpload();
+const uploadSessionPhoto = imageUpload();
+const uploadPlanPhoto = imageUpload();
 
-module.exports = { uploadAvatar, uploadFoodPhoto, uploadExercisePhoto };
+module.exports = { uploadAvatar, uploadFoodPhoto, uploadExercisePhoto, uploadSessionPhoto, uploadPlanPhoto };

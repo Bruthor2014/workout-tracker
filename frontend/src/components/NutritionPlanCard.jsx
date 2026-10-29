@@ -3,7 +3,8 @@ import GlassCard from "./GlassCard";
 import NewNutritionPlanForm from "./NewNutritionPlanForm";
 import MealEditor from "./MealEditor";
 import PlanCreator from "./PlanCreator";
-import { IconApple, IconCheck, IconChevronRight, IconPencil, IconPrinter, IconSave, IconTrash, IconUtensils } from "./Icons";
+import { IconApple, IconCheck, IconChevronRight, IconPencil, IconPrinter, IconSave, IconShare, IconTrash, IconUtensils } from "./Icons";
+import SharePlanModal from "./SharePlanModal";
 import { apiRequest, resolveAssetUrl } from "../api/client";
 import { mealVisual } from "../utils/meals";
 import { formMealToApi, mealToForm } from "../utils/mealForm";
@@ -82,6 +83,7 @@ export default function NutritionPlanCard({ plan, editable: editableProp, onChan
   const [editingMealId, setEditingMealId] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
+  const [sharing, setSharing] = useState(false);
   const [completedIds, setCompletedIds] = useState(() => new Set());
   const todayKey = toDateKey(new Date());
 
@@ -196,6 +198,12 @@ export default function NutritionPlanCard({ plan, editable: editableProp, onChan
             <IconPrinter size={16} />
             Imprimir
           </button>
+          {trackCompletion && plan.is_personal && (
+            <button type="button" className="nplan-action" onClick={() => setSharing(true)}>
+              <IconShare size={16} />
+              Partilhar
+            </button>
+          )}
           {onCollapse && (
             <button type="button" className="nplan-action" onClick={onCollapse}>
               <span style={{ display: "inline-flex", transform: "rotate(-90deg)" }}>
@@ -306,6 +314,10 @@ export default function NutritionPlanCard({ plan, editable: editableProp, onChan
           );
         })}
       </div>
+
+      {sharing && (
+        <SharePlanModal planType="nutrition" planId={plan.id} planName={plan.name} onClose={() => setSharing(false)} />
+      )}
     </GlassCard>
   );
 }

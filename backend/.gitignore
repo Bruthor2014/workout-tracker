@@ -5,3 +5,7 @@ uploads/avatars/*
 !uploads/avatars/.gitkeep
 uploads/foods/*
 !uploads/foods/.gitkeep
+uploads/sessions/*
+!uploads/sessions/.gitkeep
+uploads/plans/*
+!uploads/plans/.gitkeep

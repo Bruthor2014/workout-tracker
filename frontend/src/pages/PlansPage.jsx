@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import GlassCard from "../components/GlassCard";
 import NewPlanForm from "../components/NewPlanForm";
 import PlanCard from "../components/PlanCard";
+import PlanRow from "../components/PlanRow";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { useBackButtonOverride } from "../context/BackOverrideContext";
@@ -61,11 +62,27 @@ function PlansAuthedView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
+  // Só um plano aberto de cada vez — a lista fica fechada (PlanRow) até se
+  // clicar num para ver os detalhes (PlanCard), mesmo padrão de
+  // NutritionPage.jsx.
+  const [openId, setOpenId] = useState(null);
+  const [dragId, setDragId] = useState(null);
 
+  // Voltar fecha o plano aberto (ou o formulário de novo plano) em vez de
+  // sair da página.
   useBackButtonOverride(
-    showForm,
-    useCallback(() => setShowForm(false), [])
+    showForm || openId != null,
+    useCallback(() => {
+      if (openId != null) setOpenId(null);
+      else setShowForm(false);
+    }, [openId])
   );
+
+  // planId -> elemento DOM da linha, para medir a posição durante o
+  // arrasto (ver handlePointerMove). Não precisa de causar re-render, por
+  // isso é um ref, não state.
+  const rowRefs = useRef(new Map());
+  const dragPointerId = useRef(null);
 
   function loadPlans() {
     setLoading(true);
@@ -84,6 +101,62 @@ function PlansAuthedView() {
       .then((rows) => setRecords(new Map(rows.map((r) => [String(r.exercise_id), r]))))
       .catch(() => {});
   }, []);
+
+  function setRowRef(planId) {
+    return (el) => {
+      if (el) rowRefs.current.set(planId, el);
+      else rowRefs.current.delete(planId);
+    };
+  }
+
+  // Índice da linha cujo centro está mais perto de `y` — para onde a
+  // linha arrastada "salta" quando passa a meio de outra.
+  function closestIndexAtY(y) {
+    let closest = null;
+    let closestDist = Infinity;
+    plans.forEach((plan, i) => {
+      const el = rowRefs.current.get(plan.id);
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      const dist = Math.abs(y - mid);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closest = i;
+      }
+    });
+    return closest;
+  }
+
+  function handlePointerDown(e, planId) {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragPointerId.current = e.pointerId;
+    setDragId(planId);
+  }
+
+  function handlePointerMove(e) {
+    if (dragPointerId.current !== e.pointerId || dragId == null) return;
+    const currentIndex = plans.findIndex((p) => p.id === dragId);
+    const targetIndex = closestIndexAtY(e.clientY);
+    if (currentIndex === -1 || targetIndex === null || targetIndex === currentIndex) return;
+    setPlans((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(currentIndex, 1);
+      next.splice(targetIndex, 0, item);
+      return next;
+    });
+  }
+
+  function handlePointerUp(e) {
+    if (dragPointerId.current !== e.pointerId) return;
+    dragPointerId.current = null;
+    setDragId(null);
+    if (plans.length < 2) return;
+    apiRequest("/plans/reorder", { method: "PUT", body: { order: plans.map((p) => p.id) } }).catch((err) => {
+      setError(err.message);
+      loadPlans(); // a ordem local pode ter ficado dessincronizada da API
+    });
+  }
 
   return (
     <div className="page-container plans-page">
@@ -126,19 +199,36 @@ function PlansAuthedView() {
       )}
 
       <div className="plan-list">
-        {plans.map((plan) => (
-          <PlanCard
-            key={plan.id}
-            plan={plan}
-            exercises={exercises}
-            records={records}
-            editable
-            canStart
-            onChanged={loadPlans}
-            onExerciseCreated={(newEx) => setExercises((prev) => [...prev, newEx])}
-            onExerciseDeleted={(id) => setExercises((prev) => prev.filter((e) => e.id !== id))}
-          />
-        ))}
+        {plans.map((plan) =>
+          plan.id === openId ? (
+            <PlanCard
+              key={plan.id}
+              plan={plan}
+              exercises={exercises}
+              records={records}
+              editable
+              canStart
+              onChanged={loadPlans}
+              onCollapse={() => setOpenId(null)}
+              onExerciseCreated={(newEx) => setExercises((prev) => [...prev, newEx])}
+              onExerciseDeleted={(id) => setExercises((prev) => prev.filter((e) => e.id !== id))}
+            />
+          ) : (
+            <PlanRow
+              key={plan.id}
+              ref={setRowRef(plan.id)}
+              plan={plan}
+              onOpen={() => setOpenId(plan.id)}
+              dragging={dragId === plan.id}
+              handleProps={{
+                onPointerDown: (e) => handlePointerDown(e, plan.id),
+                onPointerMove: handlePointerMove,
+                onPointerUp: handlePointerUp,
+                onPointerCancel: handlePointerUp,
+              }}
+            />
+          )
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 const express = require("express");
 const { requireAuth, requireRole } = require("../middleware/auth");
+const { uploadPlanPhoto } = require("../middleware/upload");
 const {
   listPlans,
   createPlan,
@@ -7,7 +8,10 @@ const {
   createPlanForMember,
   updatePlan,
   updatePlanDay,
+  addPlanDay,
+  updatePlanInfo,
   deletePlan,
+  reorderPlans,
 } = require("../controllers/planController");
 
 const router = express.Router();
@@ -21,9 +25,13 @@ const NOT_OWNER = requireRole("member", "personal_trainer", "nutritionist", "rec
 
 router.get("/", requireAuth, NOT_OWNER, listPlans);
 router.post("/", requireAuth, NOT_OWNER, createPlan);
+// Antes de "/:id", senão "reorder" seria lido como um id.
+router.put("/reorder", requireAuth, NOT_OWNER, reorderPlans);
 router.get("/member/:id", requireAuth, STAFF, listPlansForMember);
 router.post("/member/:id", requireAuth, CREATORS, createPlanForMember);
 router.put("/:id", requireAuth, updatePlan);
+router.patch("/:id/info", requireAuth, uploadPlanPhoto.single("photo"), updatePlanInfo);
+router.post("/:id/days", requireAuth, addPlanDay);
 router.put("/:id/days/:dayId", requireAuth, updatePlanDay);
 router.delete("/:id", requireAuth, deletePlan);
 

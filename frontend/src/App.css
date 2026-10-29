@@ -1550,6 +1550,12 @@
   font-weight: 600;
 }
 
+.exercise-favorite-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .exercise-option-grid {
   flex: 1;
   min-height: 0;
@@ -1611,34 +1617,41 @@
   font: inherit;
 }
 
-.exercise-option-delete {
+/* Favorito (canto superior esquerdo da foto) e "?" de informação (canto
+   superior direito) — sempre visíveis em todos os cartões, catálogo ou
+   pessoais, ver ExercisePicker.jsx. Editar vídeo/eliminar deixaram de
+   sobrepor a foto (só existem em exercícios pessoais, mais abaixo, junto
+   ao nome — ver .exercise-option-owner-actions). */
+.exercise-option-favorite {
   position: absolute;
   top: 6px;
-  right: 6px;
+  left: 6px;
   z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: none;
   background: rgba(10, 8, 20, 0.6);
-  color: #fda4af;
+  color: #fff;
   backdrop-filter: blur(4px);
   transition: background 0.15s ease, color 0.15s ease;
 }
 
-/* Por baixo do botão de eliminar, no mesmo canto — este link é irmão do
-   <button> que escolhe o exercício (não pode ir dentro dele, um <a> não
-   pode estar dentro de outro elemento interativo), por isso a posição é
-   relativa ao cartão inteiro, não só à foto; "top" em vez de "bottom"
-   garante que fica sempre dentro da faixa da foto (que está sempre no
-   topo do cartão), em vez de cair em cima do nome por baixo. Abre o
-   vídeo de execução numa nova aba (ver ExercisePicker.jsx). */
-.exercise-option-video {
+.exercise-option-favorite:hover,
+.exercise-option-favorite.active {
+  background: var(--accent);
+  color: #0a0b0c;
+}
+
+/* Posicionado diretamente no cartão (não num <span> à volta) — o botão em
+   si é o único elemento que precisa de ficar no canto; a caixa de
+   informação agora é um Modal (portal), não um dropdown filho do cartão. */
+.exercise-option-info-trigger {
   position: absolute;
-  top: 38px;
+  top: 6px;
   right: 6px;
   z-index: 1;
   display: flex;
@@ -1647,13 +1660,63 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
+  border: none;
   background: rgba(10, 8, 20, 0.6);
-  color: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
   backdrop-filter: blur(4px);
+  cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
-.exercise-option-video:hover {
+.exercise-option-info-trigger:hover,
+.exercise-option-info-trigger[aria-expanded="true"] {
+  background: var(--accent);
+  color: #0a0b0c;
+}
+
+.exercise-info-modal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 22px;
+  width: auto;
+  max-width: calc(100vw - 48px);
+  text-align: center;
+}
+
+.exercise-info-modal-empty {
+  margin: 0;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+/* Editar vídeo / eliminar, só em exercícios pessoais — fila pequena na
+   parte de texto do cartão, não sobre a foto (deixava só favorito + "?"
+   livres, como pedido). */
+.exercise-option-owner-actions {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 10px;
+}
+
+.exercise-option-edit-video,
+.exercise-option-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.exercise-option-edit-video:hover {
   background: var(--accent);
   color: #0a0b0c;
 }
@@ -1763,19 +1826,16 @@
   color: var(--accent);
 }
 
-/* Selo no canto da miniatura de um exercício pessoal (owner_id definido —
-   ver exerciseController.js), para se distinguir do catálogo do ginásio. */
+/* Selo junto ao grupo muscular de um exercício pessoal (owner_id definido —
+   ver exerciseController.js), para se distinguir do catálogo do ginásio.
+   Já não sobrepõe a foto (esse canto agora é só o favorito). */
 .exercise-option-custom-badge {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  padding: 2px 8px;
+  padding: 1px 7px;
   border-radius: 3px;
   font-size: 0.64rem;
   font-weight: 700;
   color: white;
   background: rgba(var(--accent-strong-rgb), 0.85);
-  backdrop-filter: blur(4px);
 }
 
 /* --- Formulário de criar exercício pessoal (dentro do seletor) --- */
@@ -1812,6 +1872,25 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* Link discreto por baixo da pré-visualização para tirar a foto de capa
+   (EditPlanInfoForm.jsx) — só aparece quando há uma foto escolhida/já
+   guardada para remover. */
+.plan-info-remove-photo {
+  align-self: center;
+  margin: -8px 0 14px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.plan-info-remove-photo:hover {
+  color: var(--danger);
 }
 
 @media (max-width: 640px) {
@@ -2172,6 +2251,119 @@
   margin-top: 4px;
   font-size: 0.68rem;
   color: var(--text-secondary);
+}
+
+/* Mensagem especial de partilha de plano (MessagesPage.jsx — PlanShareBubble)
+   — mais larga que uma bolha de texto normal, para caber os botões de
+   aceitar/dispensar sem apertar. */
+.message-bubble.has-plan-share {
+  max-width: 85%;
+  padding: 10px;
+  background: rgba(var(--accent-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
+}
+
+.message-bubble.has-plan-share.mine {
+  background: rgba(var(--accent-strong-rgb), 0.18);
+}
+
+.plan-share-bubble-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--accent-light);
+}
+
+.plan-share-bubble-name {
+  margin: 4px 0 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.plan-share-bubble-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.plan-share-bubble-actions .glass-button,
+.plan-share-bubble-actions .glass-button-secondary {
+  font-size: 0.8rem;
+  padding: 8px 12px;
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+.plan-share-bubble-status {
+  display: inline-block;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.plan-share-bubble-status.copied {
+  color: var(--accent-light);
+  font-weight: 600;
+}
+
+/* Modal "Ver plano" (PlanPreviewModal.jsx) — o plano inteiro, só de
+   leitura (reaproveita PlanCard/NutritionPlanCard), com "Copiar" como ação
+   explícita separada de só ver. Mais largo que um modal normal, para caber
+   a grelha de séries/refeições sem apertar. */
+.plan-preview-modal-wrap {
+  max-width: 760px;
+}
+
+.plan-preview-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Mesmo motivo do fix em .modal-content > .glass — aqui os cartões ficam
+   um nível mais fundo (dentro de .plan-preview-modal), por isso o seletor
+   original (só filhos diretos de .modal-content) não os apanhava. */
+.plan-preview-modal > .glass,
+.plan-preview-modal > .glass-strong {
+  background: rgb(var(--surface-rgb));
+}
+
+.plan-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.plan-preview-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.plan-preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: sticky;
+  bottom: 0;
+}
+
+.plan-preview-actions .glass-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plan-preview-copied {
+  flex: 1;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-light);
+  font-weight: 600;
 }
 
 .messages-compose {
@@ -2875,6 +3067,31 @@
 .log-start-text {
   flex: 1;
   min-width: 0;
+}
+
+/* Passo opcional "Adicionar foto?" depois de guardar um treino (ver
+   LogWorkoutPage.jsx) — a foto aparece como banner no feed de amigos. */
+.log-photo-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  max-width: 420px;
+  margin: 24px auto;
+  padding: 28px 24px;
+}
+
+.log-photo-preview {
+  width: 100%;
+  max-width: 280px;
+  max-height: 280px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.log-photo-pick {
+  cursor: pointer;
 }
 
 .log-start-text h2 {
@@ -3991,6 +4208,7 @@
 }
 
 .nplan {
+  position: relative;
   padding: 24px 26px;
   display: flex;
   flex-direction: column;
@@ -4125,7 +4343,8 @@
 
 .nplan-actions {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
   flex-shrink: 0;
 }
 
@@ -4141,6 +4360,38 @@
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Fechar (voltar à linha colapsada — PlanRow.jsx) como só uma seta no
+   canto superior direito, em vez de mais um botão com texto na fila de
+   ações. Fila própria (não position:absolute) para nunca sobrepor as
+   ações normais do cabeçalho — puxada para cima/direita com margens
+   negativas para ficar mesmo a rente ao canto do cartão. */
+.nplan-collapse-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: -10px -12px -8px 0;
+}
+
+.nplan-collapse-corner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transform: rotate(-90deg);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.nplan-collapse-corner:hover {
+  background: rgba(var(--accent-rgb), 0.16);
+  color: var(--accent-light);
 }
 
 .nplan-action:hover:not(:disabled) {
@@ -4174,6 +4425,15 @@
   gap: 14px;
 }
 
+/* Dias de um plano de treino (PlanCard.jsx) — sempre uma coluna só, nunca
+   lado a lado como as refeições de nutrição podem ficar num ecrã largo
+   (pedido explícito: "quero os dias a mostrar para baixo e não para o
+   lado"). Maior especificidade que .nplan-meals sozinho, não precisa de
+   !important. */
+.nplan-meals.plan-days-list {
+  grid-template-columns: 1fr;
+}
+
 .nplan-meal {
   display: flex;
   flex-direction: column;
@@ -4199,9 +4459,34 @@
   gap: 10px;
 }
 
+/* Quando o dia de um plano de treino é colapsável (PlanCard.jsx) —
+   "abres o plano de segunda e aí sim dá para iniciar". Mesmo visual do
+   <div> normal, só que clicável. */
+.nplan-meal-header-toggle {
+  width: 100%;
+  /* Alvo de toque: o conteúdo sozinho (ícone 24px/texto pequeno) ficava
+     com uns 31px de altura, abaixo do que o resto do projeto usa para
+     coisas clicáveis (ex: .nplan-row-handle ao lado, 40px). */
+  padding: 8px 0;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.nplan-meal-chevron {
+  flex-shrink: 0;
+  display: inline-flex;
+  color: var(--text-secondary);
+  transition: transform 0.15s ease;
+}
+
 .nplan-meal-header h4 {
   margin: 0;
   font-size: 1.05rem;
+  line-height: 1.3;
 }
 
 .nplan-meal-icon {
@@ -4220,6 +4505,46 @@
   margin-left: auto;
   font-size: 0.78rem;
   color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Nome do dia + nº de exercícios empilhados (PlanCard.jsx — dia
+   colapsável de um plano de treino), em vez de tudo numa linha só — um
+   nome comprido ("Dia A — Peito, Ombros, Tríceps") ia a 3 linhas espremido
+   contra a contagem e a seta, o que ficava feio em mobile. */
+.nplan-meal-header-toggle .nplan-meal-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.nplan-meal-header-toggle .nplan-meal-count {
+  margin-left: 0;
+}
+
+/* Os "dias" de um plano de treino (PlanCard.jsx), mais compactos do que as
+   refeições de nutrição (pedido explícito: cabeçalho do plano "grande",
+   mas as divs dos dias mais pequenas) — âmbito só a .plan-days-list, para
+   não encolher também as refeições de nutrição, que usam as mesmas
+   classes base. */
+.plan-days-list .nplan-meal {
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.plan-days-list .nplan-meal-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.plan-days-list .nplan-meal-header h4 {
+  font-size: 0.93rem;
+}
+
+.plan-days-list .nplan-meal-count {
+  font-size: 0.72rem;
 }
 
 /* Estimativa de calorias da refeição (nplan-meal-header) — mesmo
@@ -4382,6 +4707,13 @@
   .nplan {
     padding: 18px 16px;
   }
+  /* .nplan-collapse-row usa margens negativas fixas para encostar o botão
+     ao canto — com o padding do cartão menor em mobile, essas mesmas
+     margens aproximavam-no demasiado da borda (quase colado). Ajustadas
+     aqui para manter o mesmo respiro visual que no desktop. */
+  .nplan-collapse-row {
+    margin: -4px -2px -6px 0;
+  }
   .nplan-header {
     flex-wrap: wrap;
   }
@@ -4468,6 +4800,44 @@
   background: rgba(var(--accent-rgb), 0.1);
   border: 1px solid rgba(var(--accent-rgb), 0.4);
   box-shadow: none;
+}
+
+/* Foto de capa do plano (EditPlanInfoForm.jsx), no lugar do ícone redondo
+   quando existe. */
+.plan-cover-photo {
+  overflow: hidden;
+  padding: 0;
+}
+
+.plan-cover-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* "Criar rotina" — acrescenta um dia a mais ao plano sem reescrever os
+   outros (POST /plans/:id/days), mesmo formato tracejado do "Criar
+   exercício" no seletor de exercícios. */
+.nplan-meal-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px dashed rgba(var(--accent-strong-rgb), 0.45);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.nplan-meal-add:hover {
+  border-color: var(--accent);
+  background: rgba(var(--accent-strong-rgb), 0.1);
+  color: var(--accent-light);
 }
 
 .plan-exercise-image {
@@ -6928,9 +7298,16 @@ button.tt-item.busy:hover {
   display: flex;
   gap: 8px;
   margin-bottom: 14px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .friends-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  min-height: 38px;
   padding: 8px 16px;
   border-radius: 3px;
   border: 1px solid var(--glass-border);
@@ -6939,6 +7316,7 @@ button.tt-item.busy:hover {
   font: inherit;
   font-weight: 600;
   font-size: 0.86rem;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -7018,6 +7396,585 @@ button.tt-item.busy:hover {
   font-size: 0.86rem;
   font-weight: 700;
   color: var(--accent-light);
+}
+
+/* Separador "Feed" em FriendsPage.jsx — os próprios treinos + os de quem se
+   segue, mais recente primeiro, com paginação por "Ver mais". Cada cartão é
+   como uma publicação de rede social: identidade, título, duração/volume
+   lado a lado, foto opcional, os exercícios feitos (tal como aparecem ao
+   registar o treino) e gostos/comentários/partilhar. O acento de cor
+   lateral vem de workoutVisual() (utils/muscleGroups.js), para o olho
+   associar sempre a mesma cor ao mesmo tipo de treino em toda a app. */
+.feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* Coluna de feed, não uma grelha larga — sem isto, num ecrã de PC largo
+     (a página vai até 1240px), a foto e a grelha de exercícios a 2 colunas
+     esticavam para um tamanho enorme. 560px é confortável de ler, como
+     qualquer feed de rede social a sério, e no telemóvel o ecrã já é mais
+     estreito do que isso, por isso não muda nada aí. */
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.feed-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  border-left: 3px solid var(--exercise-color, var(--accent));
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.feed-item-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.feed-item-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.feed-item-identity .member-card-avatar {
+  width: 44px;
+  height: 44px;
+}
+
+.feed-item-identity > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.feed-item-name {
+  font-weight: 700;
+  font-size: 0.94rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-item-sub {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
+.feed-item-headline {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+/* "Duração" / "Volume", rótulo em cima do valor, lado a lado — pedido
+   explícito para ficar igual ao resumo que já se vê ao terminar um treino. */
+.feed-item-stat-pair {
+  display: flex;
+  gap: 28px;
+}
+
+.feed-item-stat-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.feed-item-stat-label {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.feed-item-stat-block strong {
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+
+/* Foto opcional do treino (banner, ver LogWorkoutPage.jsx). Caixa de
+   proporção fixa (nunca estica/deforma — object-fit: cover só recorta) e
+   sangra até à borda do cartão, para se destacar como numa rede social a
+   sério. Vem logo a seguir à duração/volume, antes dos exercícios — "a
+   imagem em primeiro, depois scroll para ver o treino". */
+.feed-item-photo {
+  position: relative;
+  margin: 0 -14px;
+  aspect-ratio: 4 / 5;
+  max-height: 420px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.feed-item-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Adicionar/trocar a foto de um treino próprio diretamente no feed, não só
+   no passo logo a seguir a terminar o treino (FeedPhotoUpload em
+   FriendsPage.jsx). "add": fila larga tipo .feed-item-action, mostrada
+   quando ainda não há foto. "change": botão circular sobre o canto da
+   foto, só ícone. */
+.feed-item-photo-upload.add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px;
+  margin-top: 2px;
+  border: 1px dashed var(--glass-border);
+  border-radius: 8px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.feed-item-photo-upload.add:hover:not(:disabled) {
+  border-color: rgba(var(--accent-rgb), 0.4);
+  color: var(--accent-light);
+}
+
+.feed-item-photo-upload.change {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(10, 8, 20, 0.6);
+  color: #fff;
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+}
+
+.feed-item-photo-upload.change:hover {
+  background: rgba(10, 8, 20, 0.85);
+}
+
+.feed-item-photo-upload:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Quando há foto E exercícios: desliza-se para o lado da foto para ver o
+   treino (FeedCarousel em FriendsPage.jsx) — scroll nativo com snap, por
+   arrasto/toque, sem biblioteca nenhuma. O "sangrar até à borda" passa para
+   o wrap; cada slide (incl. a foto) fica sem a sua própria margem negativa,
+   senão desalinhava a largura usada para o snap. */
+.feed-item-carousel-wrap {
+  position: relative;
+  margin: 0 -14px;
+}
+
+.feed-item-carousel {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.feed-item-carousel::-webkit-scrollbar {
+  display: none;
+}
+
+.feed-item-carousel-slide {
+  flex: 0 0 100%;
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+.feed-item-carousel-slide.feed-item-photo {
+  margin: 0;
+}
+
+.feed-item-carousel-exercises {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+}
+
+.feed-item-carousel-exercises .feed-item-exercise-grid {
+  width: 100%;
+}
+
+/* Setas — num PC não há gesto de arrastar por toque, por isso são a única
+   forma de avançar sem um rato com scroll horizontal (ver "no pc nao da
+   para dar scroll"). Só aparece a que ainda faz sentido (2 slides). */
+.feed-item-carousel-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(10, 8, 20, 0.6);
+  color: #fff;
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+}
+
+.feed-item-carousel-arrow:hover {
+  background: rgba(10, 8, 20, 0.85);
+}
+
+.feed-item-carousel-arrow.prev {
+  left: 20px;
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.feed-item-carousel-arrow.next {
+  right: 20px;
+}
+
+.feed-item-carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.feed-item-carousel-dots button {
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+}
+
+.feed-item-carousel-dots button.active {
+  background: var(--accent);
+}
+
+/* Exercícios feitos — mesma foto/pictograma do grupo muscular que já se vê
+   ao registar o treino (ExercisePicker.jsx/WorkoutExerciseBlock.jsx), não
+   só uma lista de nomes. */
+.feed-item-exercise-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.feed-item-exercise-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feed-item-exercise-media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--exercise-color, var(--accent));
+  overflow: hidden;
+}
+
+.feed-item-exercise-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.feed-item-exercise-caption {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.3;
+}
+
+/* "N reações · N comentários" — pequena linha de prova social por cima da
+   fila de ações, só aparece quando há alguma coisa a mostrar. */
+.feed-item-social-proof {
+  display: flex;
+  gap: 14px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  padding-top: 8px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.feed-item-social-proof button {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.feed-item-social-proof button:hover {
+  color: var(--accent-light);
+}
+
+/* Gostar / Comentar / Partilhar — distribuídos em igual largura, com
+   rótulo visível (não só ícone), tal como uma publicação de rede social a
+   sério. Sem linha de prova social por cima, a fila fica logo depois dos
+   exercícios/foto, com o seu próprio separador. */
+.feed-item-actions {
+  display: flex;
+  border-top: 1px solid var(--glass-border);
+}
+
+.feed-item-social-proof + .feed-item-actions {
+  border-top: none;
+}
+
+.feed-item-action {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 6px;
+  min-height: 40px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.feed-item-action span {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.feed-item-action:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary, #fff);
+}
+
+.feed-item-action.active {
+  color: var(--accent-light);
+}
+
+.feed-item-action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.feed-item-action-delete {
+  flex: 0;
+  color: var(--danger);
+}
+
+/* Comentários (SessionCommentsModal.jsx). */
+.session-comments-modal {
+  width: 420px;
+  max-width: calc(100vw - 48px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.session-comments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.session-comment-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.session-comment-avatar {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+}
+
+.session-comment-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-comment-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.session-comment-body p {
+  margin: 0;
+  font-size: 0.88rem;
+  word-break: break-word;
+}
+
+.session-comment-delete {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.session-comment-delete:hover {
+  color: var(--danger);
+}
+
+.session-comments-form {
+  display: flex;
+  gap: 8px;
+}
+
+.session-comments-form .glass-input {
+  flex: 1;
+}
+
+/* Modal de partilha de plano (SharePlanModal.jsx) — escolher UM amigo de
+   cada vez (partilha dirigida, nunca "todos os seguidores"). */
+.share-plan-modal {
+  width: 380px;
+  max-width: calc(100vw - 48px);
+}
+
+.share-plan-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.share-plan-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: rgba(var(--accent-rgb), 0.14);
+  color: var(--accent);
+}
+
+.share-plan-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.share-plan-eyebrow {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.share-plan-hint {
+  font-size: 0.82rem;
+  margin: 4px 0 14px;
+}
+
+.share-plan-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 20px 12px;
+}
+
+.share-contact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0 -8px;
+}
+
+.share-contact-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 8px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.share-contact-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.share-contact-avatar {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.share-contact-identity {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.share-contact-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.share-contact-role {
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+
+.share-contact-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  padding: 8px 14px;
+  min-height: 36px;
+}
+
+.share-contact-button.sent {
+  color: var(--accent-light);
+  border-color: rgba(var(--accent-rgb), 0.4);
+  background: rgba(var(--accent-rgb), 0.1);
 }
 
 /* Ícone de informação clicável (InfoTooltip.jsx) — substitui texto

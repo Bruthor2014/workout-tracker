@@ -12,6 +12,7 @@ const {
   getSummary,
   getCompare,
   getRanking,
+  getFeed,
 } = require("../controllers/friendController");
 
 const router = express.Router();
@@ -28,6 +29,7 @@ router.get("/following", requireAuth, notOwner, listFollowing);
 router.get("/followers", requireAuth, notOwner, listFollowers);
 router.get("/counts", requireAuth, notOwner, getCounts);
 router.get("/ranking", requireAuth, notOwner, getRanking);
+router.get("/feed", requireAuth, notOwner, getFeed);
 router.get("/:id/summary", requireAuth, notOwner, getSummary);
 router.get("/:id/compare", requireAuth, notOwner, getCompare);
 

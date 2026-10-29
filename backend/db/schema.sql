@@ -141,9 +141,22 @@ CREATE TABLE exercises (
     image_url     TEXT,
     -- Link de vídeo de execução (ex: YouTube), opcional.
     video_url     TEXT,
+    -- Equipamento usado (filtro no seletor), opcional.
+    equipment     VARCHAR(20)
+                  CHECK (equipment IN ('barra', 'halteres', 'cabo', 'maquina', 'peso_corporal', 'kettlebell', 'elastico', 'outro')),
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_exercises_owner ON exercises(owner_id);
+
+-- Favoritos (marcador no seletor de exercícios), por utilizador.
+CREATE TABLE exercise_favorites (
+    id           SERIAL PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    exercise_id  INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (user_id, exercise_id)
+);
+CREATE INDEX idx_exercise_favorites_user ON exercise_favorites(user_id);
 
 -- Planos de treino
 CREATE TABLE workout_plans (
@@ -153,6 +166,11 @@ CREATE TABLE workout_plans (
     created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
     name         VARCHAR(150) NOT NULL,
     description  TEXT,
+    -- Ordem escolhida pelo membro na lista colapsada (PlansPage.jsx), não é
+    -- por data de criação — mesma ideia de nutrition_plans.order_index.
+    order_index  INTEGER NOT NULL DEFAULT 0,
+    -- Foto de capa opcional (ver PATCH /plans/:id/info).
+    photo_url    TEXT,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -206,8 +224,33 @@ CREATE TABLE workout_sessions (
     started_at    TIMESTAMPTZ,
     ended_at      TIMESTAMPTZ,
     notes         TEXT,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Foto opcional do treino (banner, "Adicionar foto?" ao terminar — ver
+    -- LogWorkoutPage.jsx), para aparecer no feed de amigos (FriendsPage.jsx).
+    photo_url     TEXT
 );
+
+-- Reações (só 👏, sem comentários) ao treino de um amigo no feed — quem
+-- reage tem de ser amigo de quem treinou, ou o próprio (ver
+-- toggleReaction em sessionController.js).
+CREATE TABLE session_reactions (
+    id          SERIAL PRIMARY KEY,
+    session_id  INTEGER NOT NULL REFERENCES workout_sessions(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (session_id, user_id)
+);
+CREATE INDEX idx_session_reactions_session ON session_reactions(session_id);
+
+-- Comentários (texto) num treino de um amigo no feed.
+CREATE TABLE session_comments (
+    id          SERIAL PRIMARY KEY,
+    session_id  INTEGER NOT NULL REFERENCES workout_sessions(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body        TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_session_comments_session ON session_comments(session_id, created_at);
 
 -- Séries realmente feitas (o que aconteceu, não o planeado)
 CREATE TABLE set_logs (
@@ -350,6 +393,29 @@ CREATE TABLE messages (
     read_at        TIMESTAMPTZ,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Partilha dirigida de planos (treino ou nutrição) a um amigo específico —
+-- quem recebe decide se quer copiar para a sua conta (ver plan_shares.status);
+-- nunca copia sozinho só por ter sido partilhado.
+CREATE TABLE plan_shares (
+    id            SERIAL PRIMARY KEY,
+    plan_type     VARCHAR(10) NOT NULL CHECK (plan_type IN ('workout', 'nutrition')),
+    plan_id       INTEGER NOT NULL,
+    -- Nome do plano no momento da partilha — continua a aparecer na caixa de
+    -- entrada mesmo que o original seja editado ou apagado depois.
+    plan_name     VARCHAR(150) NOT NULL,
+    from_user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    to_user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status        VARCHAR(10) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'copied', 'dismissed')),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    responded_at  TIMESTAMPTZ
+);
+CREATE INDEX idx_plan_shares_to_user ON plan_shares(to_user_id, status);
+
+-- Preenchido quando a mensagem é a notificação de uma partilha de plano
+-- (ver plan_shares acima) — a conversa mostra um cartão com aceitar/
+-- dispensar em vez de só texto.
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS plan_share_id INTEGER REFERENCES plan_shares(id) ON DELETE SET NULL;
 
 -- Uma aula/palestra/evento que se repete todas as semanas no mesmo dia e
 -- hora. O CEO (gym_owner) cria/edita/remove e atribui o responsável

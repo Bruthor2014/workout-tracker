@@ -178,12 +178,19 @@ async function getThread(req, res) {
     [otherId, req.user.id]
   );
 
+  // plan_share_id ligado (ver planShareController.js/createShare): a
+  // conversa mostra um cartão com aceitar/dispensar em vez de só o texto,
+  // por isso vem já com o estado atual da partilha, não só o texto fixo que
+  // ficou gravado em `body` no momento em que foi enviada.
   const result = await pool.query(
-    `SELECT id, sender_id, recipient_id, body, read_at, created_at
-       FROM messages
-      WHERE (sender_id = $1 AND recipient_id = $2)
-         OR (sender_id = $2 AND recipient_id = $1)
-      ORDER BY created_at ASC`,
+    `SELECT m.id, m.sender_id, m.recipient_id, m.body, m.read_at, m.created_at,
+            m.plan_share_id, ps.plan_type AS plan_share_type, ps.plan_name AS plan_share_name,
+            ps.status AS plan_share_status
+       FROM messages m
+       LEFT JOIN plan_shares ps ON ps.id = m.plan_share_id
+      WHERE (m.sender_id = $1 AND m.recipient_id = $2)
+         OR (m.sender_id = $2 AND m.recipient_id = $1)
+      ORDER BY m.created_at ASC`,
     [req.user.id, otherId]
   );
   res.json(result.rows);
